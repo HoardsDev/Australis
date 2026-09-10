@@ -58,15 +58,23 @@ Velocity setting**, and it's structurally blind to the true attack volume.
 
 ## Recommendations (priority order)
 
-1. **Feed detection from the handshake stage, not `PreLoginEvent`.** Hook
-   `ConnectionHandshakeEvent` (fires on handshake receipt, before the login-state
-   transition and Velocity's login throttle) and drive `AttackDetector` +
-   per-IP connection counting from there. Detection then reflects real volume and
-   correctly arms the attack-gated defenses for the logins that do get through.
-   *(First fix — see the earlier-hook change accompanying this doc.)*
-2. **Accept that plugin-level cannot drop pre-login floods.** Velocity gives no
-   deniable hook earlier than `PreLoginEvent`. True early-drop needs either a
-   Netty pipeline handler injected into Velocity (Sonar-style) or the edge.
+1. **Detection moved to the handshake stage** — implemented and validated (see
+   "Validation" below). `onHandshake(ConnectionHandshakeEvent)` now drives
+   `AttackDetector` + the per-IP connection limiter; `onPreLogin` only enforces
+   the kick (peek, no double-count). This is the correct place for the plugin's
+   logic and it works once traffic reaches it.
+2. **But even `ConnectionHandshakeEvent` is downstream of Velocity's
+   `login-ratelimit`.** Proven live: with `login-ratelimit=3000`, the flood never
+   reaches *any* plugin event; set it to `0` and Australis immediately fires
+   (`ATTACK DETECTED`, `flood-limited … pushed to edge`). So **Velocity's built-in
+   throttle already handles single-/few-IP connection floods for free**, and no
+   plugin hook can act earlier than it. The plugin layer only adds value where
+   the built-in can't: (a) **distributed** floods (many IPs each under the per-IP
+   throttle but collectively an attack) → attack-mode arms verification/limbo;
+   (b) pushing confirmed abusers to the **edge** for a kernel drop. True
+   see-everything/drop-everything at the proxy needs a **Netty pipeline handler**
+   injected into Velocity (Sonar-style), which is the only thing upstream of
+   `login-ratelimit`.
 3. **The real anti-DDoS is the Go `edge/` (XDP / L3-L4 + IP hiding).** That is the
    layer that deserves a high-PPS load test, and it is testable independently of
    the proxy. Prioritise it over further L7 work.
@@ -75,6 +83,25 @@ Velocity setting**, and it's structurally blind to the true attack volume.
    login against an offline-mode limbo so the verification path can be exercised.
 5. **Document the ping limiter as cache-only** on Velocity, or drop the limiter
    knob to avoid implying protection it can't deliver.
+
+## Validation of the handshake-stage fix (same session)
+
+After moving detection/limiting to `onHandshake`, a repeat single-IP flood with
+`login-ratelimit=3000` still showed **0** Australis action lines — confirming the
+throttle is upstream of the handshake event. Temporarily setting
+`login-ratelimit=0` and re-flooding produced, as designed:
+
+```
+Australis flood-limited 198.51.100.10 (connection-flood) — pushed to edge; kicked at login while banned
+Australis: ATTACK DETECTED — aggressive defences armed (verification on).
+```
+
+`engaged` rose 7 → 126 (traffic now reaching login), the per-IP limiter tripped
+and short-circuited `onPreLogin` (so 0 verification challenges for a single IP —
+correct; challenges are the distributed-flood path). `login-ratelimit` was
+restored to `3000` immediately after. **Conclusion: the fix is correct, but its
+value is realised only against distributed attacks or with the edge in front —
+for single-IP abuse, stock Velocity already wins.**
 
 ## What this does NOT tell us
 

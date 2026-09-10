@@ -4,6 +4,7 @@ import com.google.inject.Inject;
 import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.command.CommandMeta;
 import com.velocitypowered.api.event.Subscribe;
+import com.velocitypowered.api.event.connection.ConnectionHandshakeEvent;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.connection.PluginMessageEvent;
 import com.velocitypowered.api.event.connection.PostLoginEvent;
@@ -12,6 +13,7 @@ import com.velocitypowered.api.event.player.PlayerChooseInitialServerEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyPingEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
+import com.velocitypowered.api.network.HandshakeIntent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.Player;
@@ -75,6 +77,7 @@ public final class AustralisPlugin {
     private EdgeClient edgeClient;
 
     private ScheduledTask pruneTask;
+    private volatile boolean attackActive = false;
 
     @Inject
     public AustralisPlugin(ProxyServer proxy, Logger logger, @DataDirectory Path dataDir) {
@@ -158,12 +161,45 @@ public final class AustralisPlugin {
         loginThrottle.prune(ttl);
         verification.prune();
         edgeClient.housekeeping();
+        // Catch the attack->normal transition once the cooldown expires and no
+        // new handshakes are arriving to drive onHandshake.
+        setAttackState(attackDetector.isUnderAttack());
     }
 
-    // ---- Event pipeline (order matters: cheapest checks first) ----
+    /** Log the attack-mode edge transitions once, not on every connection. */
+    private void setAttackState(boolean nowUnderAttack) {
+        if (nowUnderAttack == attackActive) {
+            return;
+        }
+        attackActive = nowUnderAttack;
+        if (nowUnderAttack) {
+            logger.warn("Australis: ATTACK DETECTED — aggressive defences armed (verification {}).",
+                    config.verifyEnabled() ? "on" : "off");
+        } else {
+            logger.info("Australis: attack subsided — back to normal operation.");
+        }
+    }
 
+    // ---- Event pipeline (order matters: cheapest/earliest checks first) ----
+
+    /**
+     * Earliest hook Velocity exposes: fires on the client handshake, BEFORE the
+     * proxy's own {@code login-ratelimit} and before {@link PreLoginEvent}. This
+     * is the only place we see the <em>true</em> connection rate — everything
+     * downstream sees only what Velocity's throttle lets through. So attack
+     * detection and the per-IP connection limiter live here.
+     *
+     * <p>The event is not cancellable (Velocity gives no deniable pre-login
+     * hook), so enforcement happens where it can: the login kick in
+     * {@link #onPreLogin} for anything that survives the throttle, and — when an
+     * edge is configured — a kernel-level drop at the NIC, which is the only way
+     * to actually shed a flood at the proxy layer.
+     */
     @Subscribe
-    public void onPreLogin(PreLoginEvent event) {
+    public void onHandshake(ConnectionHandshakeEvent event) {
+        if (event.getIntent() == HandshakeIntent.STATUS) {
+            return; // status/ping volume is handled on the ping path
+        }
         InetSocketAddress remote = event.getConnection().getRemoteAddress();
         if (remote == null || remote.getAddress() == null) {
             return;
@@ -175,16 +211,34 @@ public final class AustralisPlugin {
         if (underAttack) {
             stats.attacksDetected.incrementAndGet();
         }
+        setAttackState(underAttack);
 
-        // 1) Per-IP connection flood.
         ConnectionRateLimiter.Decision conn = rateLimiter.checkConnection(ip);
         if (conn.blocked()) {
-            deny(event, config.kickMessage());
             stats.connectionsBlocked.incrementAndGet();
             edgeClient.blocklist(ip, conn.reason());
-            if (config.logBlocks()) {
-                logger.warn("Australis blocked {} ({})", ip, conn.reason());
+            // Log only the moment an IP trips, not every subsequent banned
+            // packet, so a flood does not drown the log.
+            if (config.logBlocks() && !conn.reason().endsWith("/banned")) {
+                logger.warn("Australis flood-limited {} ({}) — pushed to edge; kicked at login while banned",
+                        ip, conn.reason());
             }
+        }
+    }
+
+    @Subscribe
+    public void onPreLogin(PreLoginEvent event) {
+        InetSocketAddress remote = event.getConnection().getRemoteAddress();
+        if (remote == null || remote.getAddress() == null) {
+            return;
+        }
+        String ip = remote.getAddress().getHostAddress();
+        boolean underAttack = attackDetector.isUnderAttack();
+
+        // 1) Per-IP connection flood — counted at handshake; enforce the kick
+        //    here (the earliest deniable hook). Peek only: no double-count.
+        if (rateLimiter.isConnectionBlocked(ip)) {
+            deny(event, config.kickMessage());
             return;
         }
 

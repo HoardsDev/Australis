@@ -62,6 +62,19 @@ class ConnectionRateLimiterTest {
     }
 
     @Test
+    void isConnectionBlockedPeeksWithoutCounting() {
+        ConnectionRateLimiter l = limiter();
+        assertFalse(l.isConnectionBlocked("9.9.9.9"), "unseen IP is not blocked");
+        // Peeking must not create or advance a window: still allowed up to limit.
+        for (int i = 0; i < 3; i++) {
+            assertFalse(l.checkConnection("9.9.9.9").blocked());
+            assertFalse(l.isConnectionBlocked("9.9.9.9"), "peek must not count toward the limit");
+        }
+        assertTrue(l.checkConnection("9.9.9.9").blocked(), "4th trips the ban");
+        assertTrue(l.isConnectionBlocked("9.9.9.9"), "peek now reports the ban");
+    }
+
+    @Test
     void windowRollsAfterExpiry() throws InterruptedException {
         // Tiny window so it rolls quickly.
         ConnectionRateLimiter l = new ConnectionRateLimiter(2, 80, 1, 2, 80, 1);

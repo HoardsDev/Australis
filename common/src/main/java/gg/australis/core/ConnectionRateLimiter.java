@@ -73,6 +73,17 @@ public final class ConnectionRateLimiter {
         return check(pings, ip, maxPingPerWindow, pingWindowMillis, pingBlockMillis, "ping-flood");
     }
 
+    /**
+     * Peek whether this IP is currently connection-banned, WITHOUT counting a
+     * hit or rolling its window. Used at {@code PreLoginEvent} to enforce a ban
+     * that was already decided at the (earlier, non-deniable) handshake stage,
+     * so the connection is counted exactly once.
+     */
+    public boolean isConnectionBlocked(String ip) {
+        Window w = connections.get(ip);
+        return w != null && w.blockedUntil.get() > System.currentTimeMillis();
+    }
+
     private Decision check(Map<String, Window> table, String ip,
                            int maxPerWindow, long windowMillis, long blockMillis, String reason) {
         long now = System.currentTimeMillis();
