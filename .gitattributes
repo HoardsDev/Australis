@@ -1,0 +1,13 @@
+# Australis line-ending policy.
+# Deploys target Linux — nftables `nft -f`, shell installers, and systemd units
+# all break on CRLF. Force LF for every text file so a Windows checkout can never
+# commit CRLF that breaks a Linux edge deploy.
+* text=auto eol=lf
+
+# The Windows Gradle launcher must stay CRLF.
+*.bat text eol=crlf
+
+# Binary assets — never normalize.
+*.jar binary
+*.png binary
+*.ico binary

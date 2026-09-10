@@ -166,18 +166,29 @@ product, two deployment shapes, both free.
 
 ## 6. What we can and cannot promise (put this in the README verbatim)
 
-**Australis protects against:**
-- ✅ Bot join floods (L7) — verification stops them cold
-- ✅ Status/ping floods (L7)
-- ✅ SYN floods & malformed-packet floods up to your line rate (L3/L4 via XDP)
-- ✅ Protocol-exploit / crash packets (bad VarInts, oversized payloads)
-- ✅ Origin-IP hiding (via edge/tunnel)
-- ✅ Amplification/reflection junk on the game port (XDP source-port drop)
+**Shipped & tested today:**
+- ✅ Bot join floods (L7) — verification + per-IP limits; convicted IPs pushed to the edge
+- ✅ Status/ping floods (L7) — ping cache + per-IP tracking (note: on Velocity the
+  ping *response* can't be refused, so this is cache + detection, not a hard drop)
+- ✅ Origin-IP hiding — edge TCP forwarder (PROXY v2) or tunnel
+- ✅ **In-kernel drop of any convicted IP** — plugin → agent → nftables set
+  (`XDP_DROP`-equivalent at the netfilter layer; live-validated end-to-end)
+- ⚠️ SYN flood on the game port — a **basic** nftables SYN rate-limit (fallback,
+  *not* line-rate). Real line-rate SYN/pps filtering is the XDP job below.
+
+**Planned (not implemented yet — do not rely on these):**
+- 🚧 SYN/packet floods **up to line rate**, bad-VarInt/protocol validation, and
+  amplification source-port drops — all require the **XDP/eBPF filter** in
+  `edge/xdp/`, which is currently a documented integration plan, not code.
 
 **Australis does NOT (and no free tool can) guarantee:**
 - ❌ Absorbing a raw volumetric flood **larger than your uplink** *when you run
   your own single edge box*. Mitigation: use anycast upstream (playit) or a
   paid Tbps scrubber for that tier. We tell users this plainly.
+- ❌ Stopping a single-IP connection flood *at the plugin* beyond what Velocity's
+  own built-in `login-ratelimit` already does — the plugin's value is distributed
+  attacks (many IPs), verification, and feeding the edge blocklist. See
+  `FINDINGS-live-test.md`.
 
 Being upfront here is a feature: it builds trust and keeps you out of "your
 thing didn't save me from a 300 Gbps flood" drama.

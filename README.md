@@ -5,7 +5,10 @@ protection stack you run yourself — no monthly bill, origin IP hidden, and it
 actually stops the attacks servers get hit with.
 
 > Working codename **Australis** — rename to whatever you ship it as.
-> This repo is the **plan + Phase 1 scaffold**. See `docs/` for the full design.
+> **Status: working v1.** The Velocity/Paper plugin and the Go edge (forwarder +
+> nftables feedback loop) are built, tested, and live-validated. The XDP/eBPF
+> line-rate filter is **not yet implemented** — it's the planned performance
+> upgrade (see the honest matrix below). See `docs/` for the full design.
 
 ---
 
@@ -13,27 +16,34 @@ actually stops the attacks servers get hit with.
 
 Most Minecraft attacks aren't 300 Gbps floods — they're **bot joins, ping
 floods, SYN floods, and malformed-packet spam** that exhaust your CPU and main
-thread, not your bandwidth. Those are **100% stoppable for free** with two
-things working together: a **kernel-level XDP/eBPF filter** that drops bad
-packets in the NIC at tens of millions/sec, and a **Velocity plugin** that
-verifies real players and rate-limits abuse. For the rarer true-volumetric case,
-you ride a **free anycast upstream** (playit.gg / TCPShield-free) that already
-owns the big pipes. Result: real protection, $0.
+thread, not your bandwidth. Australis stops these with two things working
+together: a **Velocity/Paper plugin** that verifies real players and rate-limits
+abuse, and a **self-hosted edge** (a cheap/free VM) that hides your origin IP and
+drops convicted attackers **in the kernel** via nftables. For the rarer
+true-volumetric case, you ride a **free anycast upstream** (playit.gg /
+TCPShield-free) that already owns the big pipes. Result: real protection, $0.
 
 ## How it actually blocks attacks (the short version)
 
-| Attack | Stopped by | Free? |
-|---|---|---|
-| Bot join flood | Plugin verification (limbo challenge) | ✅ |
-| Ping/MOTD flood | Plugin ping cache + XDP rate-limit | ✅ |
-| SYN flood / packet flood (up to line rate) | XDP `XDP_DROP` at NIC | ✅ |
-| Malformed/crash packets | XDP protocol validation | ✅ |
-| Origin-IP exposure | Edge/tunnel hides it | ✅ |
-| Volumetric bigger than your uplink | Free anycast upstream (or paid scrubber) | ✅* |
+Honest status: ✅ = shipped & tested today · ⚠️ = partial/dependent · 🚧 = planned.
 
-\* Anycast upstream distributes it for free; a *single self-hosted edge* can't
-absorb an arbitrarily huge flood — no free tool can. We say so plainly. Full
-detail: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
+| Attack | Stopped by | Status |
+|---|---|---|
+| Bot join flood | Plugin verification + per-IP limits, convicted IPs pushed to the edge | ✅ shipped |
+| Ping / MOTD flood | Plugin ping cache + per-IP ping tracking | ✅ shipped |
+| Any convicted repeat abuser | **Edge nftables kernel drop** via the feedback loop | ✅ shipped (live-validated) |
+| Origin-IP exposure | Edge forwarder (PROXY v2) / tunnel hides it | ✅ shipped |
+| SYN / packet flood on the game port | nftables SYN rate-limit (basic fallback) → XDP line-rate | ⚠️ basic today · 🚧 XDP planned |
+| Malformed / crash packets | Plugin protocol handling → XDP VarInt/protocol validation at NIC | 🚧 XDP planned |
+| Volumetric bigger than your uplink | Free anycast upstream (or paid scrubber) | ⚠️ upstream-dependent |
+
+**Be clear on what's shipped:** the L3/L4 layer today is **nftables** — a proven
+in-kernel blocklist drop (the plugin convicts an IP → the edge agent drops it at
+the NIC) plus a basic SYN rate-limit. The **XDP/eBPF** line-rate filter
+(`edge/xdp/`) is **not implemented yet** — it's the planned performance upgrade.
+And a *single* self-hosted edge can't absorb a flood bigger than its uplink — no
+free tool can; that's what the anycast upstream is for. Full detail:
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
 [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md).
 
 ## Two ways to deploy (both $0)
@@ -42,8 +52,9 @@ detail: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
   TCPShield-free address. Origin hidden, volumetric absorbed upstream, plugin
   does all L7. Nothing else to host.
 - **Mode B — Self-edge:** run a free **Oracle Cloud** VM as your own edge with
-  the **XDP filter** + a TCP forwarder → line-rate L3/L4 + L7 filtering *and* IP
-  hiding, still free.
+  the **TCP forwarder + nftables feedback loop** → origin hiding and in-kernel
+  dropping of convicted attackers, still free. (Add the **XDP filter** on top for
+  line-rate L3/L4 once it lands — planned; the nftables path works today.)
 
 Step-by-step: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
@@ -58,8 +69,10 @@ docs/                 The plan
 common/               Shared protection logic (gg.australis.core) — one source of truth
 plugin/               Velocity plugin (Layer 2) — for networks behind a proxy
 paper/                Paper/Spigot plugin — runs directly on a backend server
-edge/xdp/             Kernel XDP/eBPF filter (Layer 1) — integration plan
-edge/proxy/           Edge TCP forwarder (Layer 0 self-mode) — integration plan
+edge/cmd/forwarder/   Edge TCP forwarder (Layer 0 self-mode) — built + tested
+edge/cmd/agent/       Feedback agent: plugin → nftables kernel drop — built + tested
+edge/nftables/        nftables ruleset (blocklist + SYN fallback) — the L3/L4 layer today
+edge/xdp/             Kernel XDP/eBPF filter (Layer 1) — integration plan (not built yet)
 testkit/              floodtest — MC load/attack harness (run from your own box)
 ```
 

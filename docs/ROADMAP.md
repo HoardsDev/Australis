@@ -27,8 +27,9 @@ Ordered by value-per-effort. Each phase is independently useful — ship as you 
       a limbo backend (NanoLimbo/Sonar) to run the actual movement/keep-alive
       checks. Native Netty-level checks in-proxy remain a future option.
 
-## Phase 3 — Edge + XDP + feedback loop ✅
-**Deliverable:** line-rate kernel filtering + origin hiding on a free VM.
+## Phase 3 — Edge + feedback loop ✅ / XDP [ ]
+**Deliverable:** origin hiding + in-kernel drop of convicted IPs on a free VM
+(shipped via nftables). Line-rate XDP filtering is the remaining upgrade (below).
 - [x] TCP forwarder with PROXY protocol v2 (Go) — header validated
 - [x] Feedback agent: plugin → kernel nftables blocklist (Go) — tested live
 - [x] Feedback client in the plugin (HTTP push, de-duplicated)
