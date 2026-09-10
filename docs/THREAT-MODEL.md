@@ -17,11 +17,12 @@ stop it.
 > - **L3/L4 enforcement** — ✅ **nftables**: an in-kernel blocklist fed by the L2
 >   feedback loop (drops any convicted IP; live-validated), plus a **basic global
 >   SYN rate-limit** fallback (~40/s, *not* line-rate).
-> - **L1 (XDP/eBPF)** — 🚧 **NOT implemented yet.** Every "L1" defense below
->   (in-kernel MC-protocol validation, VarInt checks, line-rate SYN/pps drop,
->   amplification source-port drop) is **planned**, not shipped. Until it lands,
->   those attacks are handled only as far as the nftables fallback + L2 allow.
->   See `edge/xdp/README.md` and `ARCHITECTURE.md §6`.
+> - **L1 (XDP/eBPF)** — ✅ **shipped** (opt-in `XDP=1`): per-source SYN-flood drop
+>   on the game port + an expiring convicted-IP blocklist, dropped at the NIC
+>   driver at line rate (validated: 700k+ SYNs dropped in 4s on a test box).
+>   nftables is the default L3/L4 path when XDP is off. 🚧 Still to add to the XDP
+>   filter: in-kernel MC-protocol/VarInt validation and amplification source-port
+>   drops. See `edge/xdp/README.md` and `ARCHITECTURE.md §6`.
 
 ---
 
@@ -80,8 +81,8 @@ stop it.
     as a fallback, plus kernel SYN-cookies if the OS has them enabled
     (`net.ipv4.tcp_syncookies`). This blunts a small SYN flood but is *not*
     line-rate and applies box-wide.
-  - **L1 (planned):** per-IP SYN rate-limiting + `XDP_DROP` at the NIC for
-    millions of pps. Not shipped yet.
+  - **L1 (shipped, opt-in):** per-source SYN rate-limit + `XDP_DROP` at the NIC
+    for millions of pps (validated: 707k SYNs dropped in 4s).
 
 ### 6. Garbage / invalid-protocol UDP/TCP flood on the game port
 - **How:** Random bytes or non-MC protocol aimed at the port to burn pps.

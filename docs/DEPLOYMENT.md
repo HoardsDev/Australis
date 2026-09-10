@@ -8,8 +8,8 @@ Two supported shapes. Pick one. Both cost **$0**.
 - **Mode B — Self-edge** (most control): you run a free **Oracle Cloud** VM as
   your own edge with the **TCP forwarder + nftables feedback loop**. Origin
   hiding, and in-kernel dropping of every IP the plugin convicts, still free.
-  (An XDP/eBPF filter for line-rate L3/L4 is planned but **not shipped yet** — the
-  nftables path is what runs today.)
+  Add `XDP=1` to also run the **XDP/eBPF filter** for line-rate SYN/blocklist drop
+  at the NIC; nftables is the default when XDP is off.)
 
 You can start on A and graduate to B later; the plugin is identical.
 
@@ -82,12 +82,20 @@ On your **origin** Velocity:
   the installer printed, so the plugin pushes malicious IPs to the edge's kernel
   blocklist.
 
-### B4. (Optional, later) XDP/eBPF line-rate filter — not shipped yet
-`edge/xdp/` documents the plan to add an XDP filter (vendoring
-`Outfluencer/Minecraft-XDP-eBPF` for Java, `Upioti/...` for Bedrock) for
-line-rate SYN/pps filtering ahead of the forwarder. It is **not implemented
-yet**; today's L3/L4 layer is the nftables blocklist + a basic SYN rate-limit
-installed in B2. Skip this section until the filter lands.
+### B4. (Optional) XDP/eBPF line-rate filter
+Australis ships its own XDP filter (`edge/xdp/`) that drops SYN floods per-source
+and convicted IPs **at the NIC driver** (line rate), far cheaper than nftables.
+It's opt-in because it needs a supported NIC/kernel (any modern Linux ≥ 5.15 with
+a driver that supports XDP — virtio, ixgbe, i40e, mlx5, etc.). Enable it by
+re-running the installer with `XDP=1`:
+```bash
+sudo XDP=1 ORIGIN=<your-origin-ip>:25565 ./install-edge.sh
+```
+This builds `/opt/australis/xdp-loader`, attaches the filter, pins the blocklist
+map, and points the agent at it so convicted IPs are dropped at the NIC (nftables
+stays on as a fallback). Verify with `sudo bpftool prog show | grep australis`.
+Tune `SYN_PER_WINDOW`/`SYN_WINDOW`. If your NIC can't attach XDP, leave it off —
+the nftables path from B2 covers L3/L4 enforcement.
 
 ### B5. Origin lockdown (critical, both modes)
 Make the origin only reachable *through* the edge, so nobody can bypass Australis
@@ -184,7 +192,7 @@ Prometheus at them and build a Grafana panel. Bind to loopback or a private link
 | Item | Mode A | Mode B |
 |---|---|---|
 | Edge / tunnel | playit/TCPShield free | Oracle Always-Free VM |
-| L3/L4 filtering | n/a (provider scrubs) | nftables (free); XDP planned |
+| L3/L4 filtering | n/a (provider scrubs) | nftables + XDP line-rate (free) |
 | Plugin | free | free |
 | Bandwidth | free (upstream) | 10 TB/mo free |
 | **Monthly total** | **$0** | **$0** |

@@ -5,8 +5,9 @@ Ordered by value-per-effort. Each phase is independently useful — ship as you 
 
 > Also see `CHANGELOG.md` for recent changes and `FINDINGS-live-test.md` for the
 > live flood-test results that shaped the current priorities. As of 2026-09-10 the
-> plugin + edge + nftables stack is hardened, security-audited, and live-validated;
-> XDP is the main remaining item.
+> plugin + edge + nftables stack is hardened, security-audited, and live-validated,
+> and the **XDP/eBPF line-rate filter is now shipped** (opt-in) and validated on a
+> test box. Remaining: Bedrock/RakNet edge, deeper in-XDP protocol validation, IPv6.
 
 ## Phase 1 — L7 plugin core ✅
 **Deliverable:** a Velocity plugin that already stops most attacks.
@@ -39,17 +40,20 @@ Ordered by value-per-effort. Each phase is independently useful — ship as you 
       *real* backend). Unit-tested; needs a live MC network for full E2E.
       Native Netty-level in-proxy checks remain a future option.
 
-## Phase 3 — Edge + feedback loop ✅ / XDP [ ]
-**Deliverable:** origin hiding + in-kernel drop of convicted IPs on a free VM
-(shipped via nftables). Line-rate XDP filtering is the remaining upgrade (below).
+## Phase 3 — Edge + feedback loop + XDP ✅
+**Deliverable:** origin hiding + in-kernel drop of convicted IPs on a free VM, via
+nftables (default) **and** a line-rate XDP/eBPF filter (opt-in), both fed by the
+plugin's conviction feedback loop.
 - [x] TCP forwarder with PROXY protocol v2 (Go) — header validated
 - [x] Feedback agent: plugin → kernel nftables blocklist (Go) — tested live
 - [x] Feedback client in the plugin (HTTP push, de-duplicated)
 - [x] nftables ruleset (blocklist sets + SYN rate fallback) — validates
 - [x] systemd units + one-command `install-edge.sh` (Oracle free tier)
 - [x] Origin-lockdown instructions (docs/DEPLOYMENT.md)
-- [ ] Vendor/build the open-source Minecraft XDP filter + wire agent to its map
-      (nftables set is the working interim; XDP map is the perf upgrade)
+- [x] **Own XDP/eBPF filter** (`edge/xdp/`, cilium/ebpf) — per-source SYN drop +
+      expiring convicted-IP blocklist at the NIC; loader pins the map; agent
+      `-xdp-map` wires the feedback loop to it. Validated live (700k+ SYNs/4s).
+- [ ] Deeper in-XDP MC-protocol/VarInt validation + amplification source-port drop
 
 ## Phase 4 — Packaging & distribution ✅
 - [x] Gradle wrapper committed; `go` module builds

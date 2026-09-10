@@ -44,9 +44,10 @@ the plugin config. Then:
 Players connect to the Oracle VM's IP; your origin stays hidden; abusers the
 plugin convicts get dropped at the edge kernel (nftables) automatically.
 
-> **Optional, later:** an XDP/eBPF filter for line-rate SYN/packet filtering is
-> planned (`edge/xdp/README.md`) — it is **not shipped yet**. The nftables path
-> above is what runs today.
+> **Optional:** add `XDP=1` to the installer to also run the **XDP/eBPF filter**
+> — per-source SYN-flood drop + convicted-IP blocklist at the NIC driver (line
+> rate). Needs a supported NIC/kernel; nftables is the default when it's off. See
+> `edge/xdp/README.md`.
 
 ## Verify it's working
 ```

@@ -72,7 +72,9 @@ own/are authorized to test** (e.g. test-net) — see `testkit/README.md`.
 - Distributed bot-swarm behaviour from **many** source IPs (a single/few-IP flood
   is absorbed by Velocity's own `login-ratelimit` before the plugin — see
   `FINDINGS-live-test.md`). Test **only against your own server**.
-- The XDP filter (not implemented yet).
+- The XDP filter is built + live-validated on a test VM (707k SYNs dropped in 4s;
+  agent-driven ban → NIC drop). Still to exercise on production NIC hardware and
+  to add deeper in-XDP protocol validation.
 
 ## Legal
 Only run attack/load tests against infrastructure you own or are authorized to

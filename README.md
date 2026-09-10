@@ -5,10 +5,11 @@ protection stack you run yourself — no monthly bill, origin IP hidden, and it
 actually stops the attacks servers get hit with.
 
 > Working codename **Australis** — rename to whatever you ship it as.
-> **Status: working v1.** The Velocity/Paper plugin and the Go edge (forwarder +
-> nftables feedback loop) are built, tested, and live-validated. The XDP/eBPF
-> line-rate filter is **not yet implemented** — it's the planned performance
-> upgrade (see the honest matrix below). See `docs/` for the full design.
+> **Status: working v1.** The Velocity/Bungee/Paper plugins, the Go edge
+> (forwarder + nftables feedback loop), and the **XDP/eBPF line-rate filter** are
+> all built, tested, and live-validated (the XDP filter dropped 700k+ SYNs/4s and
+> agent-driven bans at the NIC on a test box). XDP is opt-in (`XDP=1`) since it
+> needs a supported NIC/kernel; nftables is the default. See `docs/`.
 
 ---
 
@@ -33,16 +34,18 @@ Honest status: ✅ = shipped & tested today · ⚠️ = partial/dependent · �
 | Ping / MOTD flood | Plugin ping cache + per-IP ping tracking | ✅ shipped |
 | Any convicted repeat abuser | **Edge nftables kernel drop** via the feedback loop | ✅ shipped (live-validated) |
 | Origin-IP exposure | Edge forwarder (PROXY v2) / tunnel hides it | ✅ shipped |
-| SYN / packet flood on the game port | nftables SYN rate-limit (basic fallback) → XDP line-rate | ⚠️ basic today · 🚧 XDP planned |
-| Malformed / crash packets | Plugin protocol handling → XDP VarInt/protocol validation at NIC | 🚧 XDP planned |
+| SYN flood on the game port | **XDP** per-source SYN drop at the NIC (nftables fallback) | ✅ shipped (opt-in) |
+| Convicted IP, at the NIC | **XDP** blocklist drop via the feedback loop (or nftables) | ✅ shipped |
+| Malformed / truncated packets | XDP drops truncated TCP; deep VarInt/protocol checks | ⚠️ partial |
 | Volumetric bigger than your uplink | Free anycast upstream (or paid scrubber) | ⚠️ upstream-dependent |
 
-**Be clear on what's shipped:** the L3/L4 layer today is **nftables** — a proven
-in-kernel blocklist drop (the plugin convicts an IP → the edge agent drops it at
-the NIC) plus a basic SYN rate-limit. The **XDP/eBPF** line-rate filter
-(`edge/xdp/`) is **not implemented yet** — it's the planned performance upgrade.
-And a *single* self-hosted edge can't absorb a flood bigger than its uplink — no
-free tool can; that's what the anycast upstream is for. Full detail:
+**What's shipped:** two L3/L4 paths — **nftables** (default, everywhere) and the
+**XDP/eBPF** filter (`edge/xdp/`, opt-in with `XDP=1`) which drops SYN floods and
+convicted IPs *at the NIC driver* at line rate (validated: 700k+ SYNs dropped in
+4s on a test box). Both are fed by the plugin's conviction → agent → kernel
+feedback loop. Deeper in-kernel MC-protocol/VarInt validation is still future. And
+a *single* self-hosted edge can't absorb a flood bigger than its uplink — no free
+tool can; that's what the anycast upstream is for. Full detail:
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
 [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md).
 
@@ -53,8 +56,8 @@ free tool can; that's what the anycast upstream is for. Full detail:
   does all L7. Nothing else to host.
 - **Mode B — Self-edge:** run a free **Oracle Cloud** VM as your own edge with
   the **TCP forwarder + nftables feedback loop** → origin hiding and in-kernel
-  dropping of convicted attackers, still free. (Add the **XDP filter** on top for
-  line-rate L3/L4 once it lands — planned; the nftables path works today.)
+  dropping of convicted attackers, still free. Add `XDP=1` to enable the **XDP
+  filter** for line-rate SYN/blocklist drop at the NIC (needs a supported NIC).
 
 Step-by-step: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
@@ -73,8 +76,9 @@ paper/                Paper/Spigot plugin — runs directly on a backend server
 limbo/                Paper limbo verifier — proves real clients, signals the proxy
 edge/cmd/forwarder/   Edge TCP forwarder (Layer 0 self-mode) — built + tested
 edge/cmd/agent/       Feedback agent: plugin → nftables kernel drop — built + tested
-edge/nftables/        nftables ruleset (blocklist + SYN fallback) — the L3/L4 layer today
-edge/xdp/             Kernel XDP/eBPF filter (Layer 1) — integration plan (not built yet)
+edge/nftables/        nftables ruleset (blocklist + SYN fallback) — default L3/L4 layer
+edge/xdp/             Kernel XDP/eBPF filter (Layer 1) — built + tested (opt-in, line-rate)
+edge/cmd/xdp-loader/  XDP loader (cilium/ebpf) — attaches the filter, pins the blocklist map
 testkit/              floodtest — MC load/attack harness (run from your own box)
 ```
 
@@ -94,8 +98,11 @@ Working, and validated where the sandbox allowed:
   emits a byte-correct header), and a feedback agent that drops convicted IPs
   into a live nftables set (validated end-to-end), plus systemd units, nftables
   ruleset, and a one-command `install-edge.sh`.
-- **Layer 1 XDP:** integration plan around the open-source Minecraft XDP filters
-  (see `edge/xdp/`).
+- **Layer 1 XDP (Go, cilium/ebpf):** our own eBPF filter — per-source SYN-flood
+  drop on the game port + an expiring convicted-IP blocklist, both at the NIC
+  driver (line-rate). Loader pins the blocklist map so the agent drops IPs there.
+  Live-validated on a test box (700k+ SYNs dropped in 4s). Opt-in (`XDP=1`); see
+  `edge/xdp/`.
 
 - **Deep verification:** limbo routing (`LimboRouter` + `australis:verify` plugin
   channel) that sends unverified players to a limbo backend first.

@@ -173,13 +173,16 @@ product, two deployment shapes, both free.
 - ✅ Origin-IP hiding — edge TCP forwarder (PROXY v2) or tunnel
 - ✅ **In-kernel drop of any convicted IP** — plugin → agent → nftables set
   (`XDP_DROP`-equivalent at the netfilter layer; live-validated end-to-end)
-- ⚠️ SYN flood on the game port — a **basic** nftables SYN rate-limit (fallback,
-  *not* line-rate). Real line-rate SYN/pps filtering is the XDP job below.
+- ✅ SYN floods on the game port — **per-source XDP drop at the NIC** (line-rate;
+  opt-in `XDP=1`), with an nftables SYN rate-limit as the default fallback.
+- ✅ Convicted-IP drop at the NIC via **either** the XDP blocklist map **or**
+  nftables (the plugin's feedback loop feeds whichever is enabled).
 
-**Planned (not implemented yet — do not rely on these):**
-- 🚧 SYN/packet floods **up to line rate**, bad-VarInt/protocol validation, and
-  amplification source-port drops — all require the **XDP/eBPF filter** in
-  `edge/xdp/`, which is currently a documented integration plan, not code.
+**Planned (not shipped yet):**
+- 🚧 Deep in-kernel MC-protocol validation (bad-VarInt / oversized-payload checks)
+  and amplification source-port drops inside the XDP filter, plus a Bedrock/RakNet
+  XDP path. The XDP filter ships today with per-source SYN-flood drop + the
+  convicted-IP blocklist; these are the next additions to it.
 
 **Australis does NOT (and no free tool can) guarantee:**
 - ❌ Absorbing a raw volumetric flood **larger than your uplink** *when you run

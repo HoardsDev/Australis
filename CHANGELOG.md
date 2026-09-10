@@ -6,6 +6,13 @@ All notable changes to Australis. Format loosely follows
 ## [Unreleased]
 
 ### Added
+- **XDP/eBPF line-rate filter** (`edge/xdp/`, opt-in `XDP=1`) — our own eBPF
+  program (cilium/ebpf loader) that drops SYN floods per-source and convicted IPs
+  **at the NIC driver**. The agent's `-xdp-map` writes bans into the pinned
+  blocklist map, moving the feedback loop from nftables to the NIC. bpf2go object
+  committed so CI builds without clang; loader cross-built for amd64+arm64.
+  Live-validated on a KVM test box: 707k SYNs dropped in 4s, agent-driven bans
+  dropped at the NIC.
 - **`bungee/` — BungeeCord/Waterfall port**, feature-parity with the Velocity
   plugin, reusing `common/` verbatim. Exploits Bungee's cancellable `PreLogin`
   (direct pre-login reject) and `ProxyPingEvent.setResponse` (real ping cache),
