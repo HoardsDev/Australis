@@ -49,11 +49,15 @@ verification:
 
 # --- Edge feedback loop (Phase 3): push confirmed abusers to the kernel ---
 # Point this at the Australis edge agent (see docs/DEPLOYMENT.md Mode B).
-# When enabled, blocked IPs are dropped at the NIC (nftables set / XDP map).
+# When enabled, blocked IPs are dropped in the kernel (nftables set today; the
+# XDP map is a planned upgrade).
 edge:
   enabled: false
-  url: "http://10.8.0.2:8787"   # edge agent address (over your private link)
-  token: "change-me"            # must match the agent's --token
+  # Reach the agent over a PRIVATE link (WireGuard/Tailscale). Plain http:// is
+  # fine only on such a link; use https:// for any routable address (the token
+  # and blocked IPs travel in the request).
+  url: "http://10.8.0.2:8787"
+  token: "change-me"            # must match the agent's TOKEN (env on the edge box)
   ban-seconds: 600              # how long the edge should drop the IP
 
 # --- Memory housekeeping ---

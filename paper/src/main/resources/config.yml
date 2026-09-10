@@ -30,7 +30,9 @@ verification:
   kick-message: "Australis > Verifying connection... please reconnect."
   allowlist: []
 
-# Push convicted IPs to an Australis edge agent (nftables/XDP). Optional.
+# Push convicted IPs to an Australis edge agent (kernel nftables drop). Optional.
+# Reach the agent over a private link (WireGuard/Tailscale); use https:// for any
+# routable address. token must match the agent's TOKEN.
 edge:
   enabled: false
   url: "http://10.8.0.2:8787"
