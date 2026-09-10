@@ -33,7 +33,7 @@ jobs:
           cp paper/build/libs/*.jar /tmp/pub/dist/
           cp limbo/build/libs/*.jar /tmp/pub/dist/
           cp bungee/build/libs/*.jar /tmp/pub/dist/
-          printf '# Australis built jars\n\nAuto-published from main (%s).\n\n- `australis-velocity-*.jar` — drop into a Velocity proxy `plugins/`\n- `australis-bungee-*.jar` — drop into a BungeeCord/Waterfall proxy `plugins/`\n- `australis-paper-*.jar` — drop into a Paper/Spigot server (a Paper server) `plugins/`\n- `australis-limbo-*.jar` — drop into the Paper server you use as the verification limbo\n' "$GITHUB_SHA" > /tmp/pub/README.md
+          printf '# Australis built jars\n\nAuto-published from main (%s).\n\n- `australis-velocity-*.jar` — drop into a Velocity proxy `plugins/`\n- `australis-bungee-*.jar` — drop into a BungeeCord/Waterfall proxy `plugins/`\n- `australis-paper-*.jar` — drop into a Paper/Spigot server `plugins/`\n- `australis-limbo-*.jar` — drop into the Paper server you use as the verification limbo\n' "$GITHUB_SHA" > /tmp/pub/README.md
           cd /tmp/pub
           git init -q
           git checkout -b builds

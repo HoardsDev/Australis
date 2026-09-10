@@ -83,7 +83,7 @@ testkit/              floodtest — MC load/attack harness (run from your own bo
 ```
 
 **Which plugin?** **Velocity** network → `plugin/`. **BungeeCord/Waterfall**
-network → `bungee/`. Single **Paper** server (like a Paper server) with no proxy →
+network → `bungee/`. Single **Paper** server with no proxy →
 `paper/`. All three share the exact same tested protection logic
 (`common/gg.australis.core`).
 

@@ -5,7 +5,7 @@ It reproduces the attack vectors Australis defends against so you can watch the
 protection work (or find gaps) against a real proxy.
 
 > ⚠️ **LEGAL / SAFETY.** Run this **only** against a target you own or are
-> explicitly authorized to test (e.g. your own test-net test network). Pointing
+> explicitly authorized to test (e.g. your own test network). Pointing
 > it at anyone else's server is a denial-of-service attack and a crime. The tool
 > refuses to run without the `-i-own-this-target` flag, by design. Don't remove
 > that gate.
