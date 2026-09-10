@@ -39,6 +39,7 @@ import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Australis — free, self-hosted L7 protection for Minecraft (Velocity proxy).
@@ -77,7 +78,7 @@ public final class AustralisPlugin {
     private EdgeClient edgeClient;
 
     private ScheduledTask pruneTask;
-    private volatile boolean attackActive = false;
+    private final AtomicBoolean attackActive = new AtomicBoolean(false);
 
     @Inject
     public AustralisPlugin(ProxyServer proxy, Logger logger, @DataDirectory Path dataDir) {
@@ -166,12 +167,15 @@ public final class AustralisPlugin {
         setAttackState(attackDetector.isUnderAttack());
     }
 
-    /** Log the attack-mode edge transitions once, not on every connection. */
+    /**
+     * Log the attack-mode edge transitions once, not on every connection. Called
+     * concurrently from every event thread and the prune task, so the transition
+     * is claimed with a CAS to guarantee exactly-one log per edge.
+     */
     private void setAttackState(boolean nowUnderAttack) {
-        if (nowUnderAttack == attackActive) {
+        if (!attackActive.compareAndSet(!nowUnderAttack, nowUnderAttack)) {
             return;
         }
-        attackActive = nowUnderAttack;
         if (nowUnderAttack) {
             logger.warn("Australis: ATTACK DETECTED — aggressive defences armed (verification {}).",
                     config.verifyEnabled() ? "on" : "off");

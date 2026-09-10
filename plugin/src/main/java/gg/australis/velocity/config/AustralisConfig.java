@@ -1,5 +1,6 @@
 package gg.australis.velocity.config;
 
+import gg.australis.core.ConfigSanitizer;
 import net.kyori.adventure.text.Component;
 import org.slf4j.Logger;
 import org.yaml.snakeyaml.Yaml;
@@ -91,8 +92,80 @@ public final class AustralisConfig {
             }
         } catch (IOException e) {
             logger.warn("Australis could not load config, using defaults: {}", e.getMessage());
+        } catch (RuntimeException e) {
+            // Malformed YAML (SnakeYAML throws unchecked) must never crash startup:
+            // fall back to a fully-default, already-valid config.
+            logger.warn("Australis config is malformed, using defaults: {}", e.getMessage());
+            cfg = new AustralisConfig();
         }
+        cfg.validate(m -> logger.warn(m));
         return cfg;
+    }
+
+    /**
+     * Build and validate a config straight from a parsed map. Package-private seam
+     * for unit tests (no filesystem / YAML / logger required); {@code loadOrCreate}
+     * is the production entry point.
+     */
+    static AustralisConfig fromMap(Map<String, Object> root, ConfigSanitizer.Warner warn) {
+        AustralisConfig cfg = new AustralisConfig();
+        if (root != null) {
+            cfg.apply(root);
+        }
+        cfg.validate(warn);
+        return cfg;
+    }
+
+    /**
+     * Clamp every numeric setting into a safe range, reporting anything changed.
+     * Runs after {@link #apply} so bad file values can't drive a component into a
+     * crash (e.g. a non-positive prune interval) or a permanent-attack / never-
+     * limit state (e.g. a zero window or threshold).
+     */
+    void validate(ConfigSanitizer.Warner warn) {
+        // Connection limiter
+        maxConnectionsPerWindow = ConfigSanitizer.clampInt(warn,
+                "connections.max-per-window", maxConnectionsPerWindow, 1, 1_000_000);
+        connectionWindowMillis = ConfigSanitizer.clampLong(warn,
+                "connections.window-millis", connectionWindowMillis, 1, 3_600_000);
+        connectionBlockMillis = ConfigSanitizer.clampLong(warn,
+                "connections.block-millis", connectionBlockMillis, 0, 86_400_000);
+        // Ping limiter
+        maxPingsPerWindow = ConfigSanitizer.clampInt(warn,
+                "pings.max-per-window", maxPingsPerWindow, 1, 1_000_000);
+        pingWindowMillis = ConfigSanitizer.clampLong(warn,
+                "pings.window-millis", pingWindowMillis, 1, 3_600_000);
+        pingBlockMillis = ConfigSanitizer.clampLong(warn,
+                "pings.block-millis", pingBlockMillis, 0, 86_400_000);
+        pingCacheMillis = ConfigSanitizer.clampLong(warn,
+                "pings.cache-millis", pingCacheMillis, 0, 60_000);
+        // Login throttle
+        maxLoginsPerWindow = ConfigSanitizer.clampInt(warn,
+                "login.max-per-window", maxLoginsPerWindow, 1, 1_000_000);
+        loginWindowMillis = ConfigSanitizer.clampLong(warn,
+                "login.window-millis", loginWindowMillis, 1, 3_600_000);
+        maxChurn = ConfigSanitizer.clampInt(warn,
+                "login.max-churn", maxChurn, 0, 1_000_000);
+        // Attack detector
+        attackPerSecondThreshold = ConfigSanitizer.clampInt(warn,
+                "attack-detector.connections-per-second", attackPerSecondThreshold, 1, 10_000_000);
+        attackCooldownMillis = ConfigSanitizer.clampLong(warn,
+                "attack-detector.cooldown-millis", attackCooldownMillis, 0, 86_400_000);
+        // Verification
+        verifyReconnectWindowMillis = ConfigSanitizer.clampLong(warn,
+                "verification.reconnect-window-millis", verifyReconnectWindowMillis, 1, 3_600_000);
+        verifyVerifiedTtlMillis = ConfigSanitizer.clampLong(warn,
+                "verification.verified-ttl-millis", verifyVerifiedTtlMillis, 1, 604_800_000L);
+        verifyPendingTtlMillis = ConfigSanitizer.clampLong(warn,
+                "verification.pending-ttl-millis", verifyPendingTtlMillis, 1, 3_600_000);
+        // Edge feedback
+        edgeBanSeconds = ConfigSanitizer.clampLong(warn,
+                "edge.ban-seconds", edgeBanSeconds, 0, 31_536_000L);
+        // Housekeeping — prune interval must be positive (Duration.repeat rejects 0).
+        pruneIntervalMillis = ConfigSanitizer.clampLong(warn,
+                "housekeeping.prune-interval-millis", pruneIntervalMillis, 1_000, 3_600_000);
+        entryTtlMillis = ConfigSanitizer.clampLong(warn,
+                "housekeeping.entry-ttl-millis", entryTtlMillis, 0, 86_400_000);
     }
 
     @SuppressWarnings("unchecked")

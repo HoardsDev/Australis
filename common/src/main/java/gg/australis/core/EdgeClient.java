@@ -8,8 +8,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -32,12 +32,24 @@ public final class EdgeClient {
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(2))
             .build();
-    private final ScheduledExecutorService exec =
-            Executors.newSingleThreadScheduledExecutor(r -> {
+    /**
+     * Cap on queued edge pushes. A spoofed/unique-IP flood produces one send task
+     * per fresh IP; without a bound this single-threaded queue of blocking HTTP
+     * calls would grow without limit and exhaust the heap. When the queue is full
+     * we drop new pushes (the in-JVM limiter still protects the proxy, and the
+     * edge de-dups), never blocking or throwing on the calling event thread.
+     */
+    private static final int MAX_QUEUED_PUSHES = 10_000;
+
+    private final ThreadPoolExecutor exec = new ThreadPoolExecutor(
+            1, 1, 0L, TimeUnit.MILLISECONDS,
+            new LinkedBlockingQueue<>(MAX_QUEUED_PUSHES),
+            r -> {
                 Thread t = new Thread(r, "australis-edge");
                 t.setDaemon(true);
                 return t;
-            });
+            },
+            new ThreadPoolExecutor.DiscardPolicy());
 
     /** ip -> lastPushedMillis, to de-dup. */
     private final ConcurrentHashMap<String, Long> recentlyPushed = new ConcurrentHashMap<>();

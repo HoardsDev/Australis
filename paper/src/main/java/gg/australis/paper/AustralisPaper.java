@@ -1,6 +1,7 @@
 package gg.australis.paper;
 
 import gg.australis.core.AttackDetector;
+import gg.australis.core.ConfigSanitizer;
 import gg.australis.core.ConnectionRateLimiter;
 import gg.australis.core.EdgeClient;
 import gg.australis.core.LoginThrottle;
@@ -22,6 +23,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.net.InetSocketAddress;
 import java.util.HashSet;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Australis — Paper-native L7 DDoS/bot protection.
@@ -50,6 +52,7 @@ public final class AustralisPaper extends JavaPlugin implements Listener, Comman
     private volatile boolean logBlocks = true;
     private volatile long verifiedTtlMillis = 3_600_000L;
     private volatile long entryTtlMillis = 300_000L;
+    private final AtomicBoolean attackActive = new AtomicBoolean(false);
 
     @Override
     public void onEnable() {
@@ -88,43 +91,63 @@ public final class AustralisPaper extends JavaPlugin implements Listener, Comman
 
     private void reconfigureAll() {
         FileConfiguration c = getConfig();
+        // Clamp every numeric setting to a safe range (mirrors the Velocity
+        // AustralisConfig.validate) so a bad config degrades to safe defaults
+        // instead of pinning permanent-attack mode or disabling a limiter.
+        ConfigSanitizer.Warner warn = m -> getSLF4JLogger().warn(m);
 
         attackDetector.reconfigure(
-                c.getInt("attack-detector.connections-per-second", 60),
-                c.getLong("attack-detector.cooldown-millis", 30_000));
+                ConfigSanitizer.clampInt(warn, "attack-detector.connections-per-second",
+                        c.getInt("attack-detector.connections-per-second", 60), 1, 10_000_000),
+                ConfigSanitizer.clampLong(warn, "attack-detector.cooldown-millis",
+                        c.getLong("attack-detector.cooldown-millis", 30_000), 0, 86_400_000));
 
         rateLimiter.reconfigure(
-                c.getInt("connections.max-per-window", 8),
-                c.getLong("connections.window-millis", 3_000),
-                c.getLong("connections.block-millis", 30_000),
-                c.getInt("pings.max-per-window", 20),
-                c.getLong("pings.window-millis", 3_000),
-                c.getLong("pings.block-millis", 10_000));
+                ConfigSanitizer.clampInt(warn, "connections.max-per-window",
+                        c.getInt("connections.max-per-window", 8), 1, 1_000_000),
+                ConfigSanitizer.clampLong(warn, "connections.window-millis",
+                        c.getLong("connections.window-millis", 3_000), 1, 3_600_000),
+                ConfigSanitizer.clampLong(warn, "connections.block-millis",
+                        c.getLong("connections.block-millis", 30_000), 0, 86_400_000),
+                ConfigSanitizer.clampInt(warn, "pings.max-per-window",
+                        c.getInt("pings.max-per-window", 20), 1, 1_000_000),
+                ConfigSanitizer.clampLong(warn, "pings.window-millis",
+                        c.getLong("pings.window-millis", 3_000), 1, 3_600_000),
+                ConfigSanitizer.clampLong(warn, "pings.block-millis",
+                        c.getLong("pings.block-millis", 10_000), 0, 86_400_000));
 
         loginThrottle.reconfigure(
-                c.getInt("login.max-per-window", 6),
-                c.getLong("login.window-millis", 5_000),
-                c.getInt("login.max-churn", 4));
+                ConfigSanitizer.clampInt(warn, "login.max-per-window",
+                        c.getInt("login.max-per-window", 6), 1, 1_000_000),
+                ConfigSanitizer.clampLong(warn, "login.window-millis",
+                        c.getLong("login.window-millis", 5_000), 1, 3_600_000),
+                ConfigSanitizer.clampInt(warn, "login.max-churn",
+                        c.getInt("login.max-churn", 4), 0, 1_000_000));
 
-        verifiedTtlMillis = c.getLong("verification.verified-ttl-millis", 3_600_000);
+        verifiedTtlMillis = ConfigSanitizer.clampLong(warn, "verification.verified-ttl-millis",
+                c.getLong("verification.verified-ttl-millis", 3_600_000), 1, 604_800_000L);
         verification.reconfigure(
                 c.getBoolean("verification.enabled", true),
                 c.getBoolean("verification.only-during-attack", true),
-                c.getLong("verification.reconnect-window-millis", 15_000),
+                ConfigSanitizer.clampLong(warn, "verification.reconnect-window-millis",
+                        c.getLong("verification.reconnect-window-millis", 15_000), 1, 3_600_000),
                 verifiedTtlMillis,
-                c.getLong("verification.pending-ttl-millis", 60_000),
+                ConfigSanitizer.clampLong(warn, "verification.pending-ttl-millis",
+                        c.getLong("verification.pending-ttl-millis", 60_000), 1, 3_600_000),
                 new HashSet<>(c.getStringList("verification.allowlist")));
 
         edgeClient.reconfigure(
                 c.getBoolean("edge.enabled", false),
                 c.getString("edge.url", ""),
                 c.getString("edge.token", ""),
-                c.getLong("edge.ban-seconds", 600));
+                ConfigSanitizer.clampLong(warn, "edge.ban-seconds",
+                        c.getLong("edge.ban-seconds", 600), 0, 31_536_000L));
 
         kickMsg = c.getString("kick-message", kickMsg);
         verifyKickMsg = c.getString("verification.kick-message", verifyKickMsg);
         logBlocks = c.getBoolean("log-blocks", true);
-        entryTtlMillis = c.getLong("housekeeping.entry-ttl-millis", 300_000);
+        entryTtlMillis = ConfigSanitizer.clampLong(warn, "housekeeping.entry-ttl-millis",
+                c.getLong("housekeeping.entry-ttl-millis", 300_000), 0, 86_400_000);
     }
 
     private void prune() {
@@ -132,12 +155,34 @@ public final class AustralisPaper extends JavaPlugin implements Listener, Comman
         loginThrottle.prune(entryTtlMillis);
         verification.prune();
         edgeClient.housekeeping();
+        // Catch the attack->normal transition once the cooldown expires and no
+        // new logins are arriving to drive onPreLogin.
+        setAttackState(attackDetector.isUnderAttack());
+    }
+
+    /**
+     * Log attack-mode edge transitions once (parity with the Velocity plugin).
+     * Called from the async pre-login event and the async prune task, so the
+     * transition is claimed with a CAS for exactly-one log per edge.
+     */
+    private void setAttackState(boolean nowUnderAttack) {
+        if (!attackActive.compareAndSet(!nowUnderAttack, nowUnderAttack)) {
+            return;
+        }
+        if (nowUnderAttack) {
+            getSLF4JLogger().warn("Australis (Paper): ATTACK DETECTED — aggressive defences armed.");
+        } else {
+            getSLF4JLogger().info("Australis (Paper): attack subsided — back to normal operation.");
+        }
     }
 
     // ---- Event pipeline (AsyncPlayerPreLogin runs off the main thread) ----
 
     @EventHandler(priority = EventPriority.LOW)
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
+        if (event.getAddress() == null) {
+            return; // no source address to key on; nothing we can safely do
+        }
         String ip = event.getAddress().getHostAddress();
         stats.connectionsSeen.incrementAndGet();
 
@@ -145,13 +190,16 @@ public final class AustralisPaper extends JavaPlugin implements Listener, Comman
         if (underAttack) {
             stats.attacksDetected.incrementAndGet();
         }
+        setAttackState(underAttack);
 
         ConnectionRateLimiter.Decision conn = rateLimiter.checkConnection(ip);
         if (conn.blocked()) {
             event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, kickMsg);
             stats.connectionsBlocked.incrementAndGet();
             edgeClient.blocklist(ip, conn.reason());
-            if (logBlocks) {
+            // Log only the moment an IP trips, not every banned packet, so a
+            // flood does not drown the log (parity with the Velocity plugin).
+            if (logBlocks && !conn.reason().endsWith("/banned")) {
                 getSLF4JLogger().warn("Australis blocked {} ({})", ip, conn.reason());
             }
             return;
@@ -161,17 +209,26 @@ public final class AustralisPaper extends JavaPlugin implements Listener, Comman
             event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, kickMsg);
             stats.loginsThrottled.incrementAndGet();
             edgeClient.blocklist(ip, "login-abuse");
+            if (logBlocks) {
+                getSLF4JLogger().warn("Australis throttled login from {}", ip);
+            }
             return;
         }
 
         if (verification.check(ip, underAttack) == VerificationManager.Result.DENY_RECONNECT) {
             event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, verifyKickMsg);
             stats.verificationChallenges.incrementAndGet();
+            if (logBlocks) {
+                getSLF4JLogger().info("Australis issued reconnect challenge to {}", ip);
+            }
         }
     }
 
     @EventHandler
     public void onPing(ServerListPingEvent event) {
+        if (event.getAddress() == null) {
+            return;
+        }
         stats.pingsSeen.incrementAndGet();
         String ip = event.getAddress().getHostAddress();
         if (rateLimiter.checkPing(ip).blocked()) {

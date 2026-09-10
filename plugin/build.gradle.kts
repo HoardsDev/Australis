@@ -38,6 +38,9 @@ dependencies {
     // Tests (the protection-logic classes are pure JDK and fully unit-tested).
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    // AustralisConfig has Component-typed getters, so the class needs adventure
+    // on the test classpath to link (the config tests never build a Component).
+    testImplementation("net.kyori:adventure-api:4.17.0")
 }
 
 tasks.test {
