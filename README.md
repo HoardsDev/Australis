@@ -58,6 +58,7 @@ docs/                 The plan
 plugin/               Velocity plugin (Layer 2) — Phase 1 scaffold, buildable
 edge/xdp/             Kernel XDP/eBPF filter (Layer 1) — integration plan
 edge/proxy/           Edge TCP forwarder (Layer 0 self-mode) — integration plan
+testkit/              floodtest — MC load/attack harness (run from your own box)
 ```
 
 ## Status

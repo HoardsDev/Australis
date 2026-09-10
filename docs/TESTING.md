@@ -45,6 +45,13 @@ cd edge && go test ./...
 - **nftables ruleset:** `nft -c -f` validates.
 - **Installer:** `bash -n install-edge.sh` passes.
 
+### Load/attack harness (`testkit/`)
+`floodtest` reproduces the real attack vectors (ping flood, bot join flood, conn
+flood, reconnect challenge) so you can measure Australis against a live proxy.
+Its protocol helpers are unit-tested and the ping path was validated end-to-end
+against a mock status server. **Run it from your own machine against a target you
+own/are authorized to test** (e.g. test-net) — see `testkit/README.md`.
+
 ## Still needs a real Minecraft environment (can't be done in this sandbox)
 The Velocity-facing plugin glue compiles in CI (the Velocity API repo is not
 reachable from the dev sandbox, so CI is its first full compile). These need a

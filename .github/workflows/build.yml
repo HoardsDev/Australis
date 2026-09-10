@@ -51,10 +51,31 @@ jobs:
           name: australis-edge
           path: edge/dist/*
 
+  testkit:
+    name: Build load-test harness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - name: Vet + test + build
+        working-directory: testkit
+        run: |
+          go vet ./...
+          go test ./...
+          GOOS=linux GOARCH=amd64 go build -o dist/floodtest-amd64 ./cmd/floodtest
+          GOOS=windows GOARCH=amd64 go build -o dist/floodtest-amd64.exe ./cmd/floodtest
+      - name: Upload harness
+        uses: actions/upload-artifact@v4
+        with:
+          name: australis-testkit
+          path: testkit/dist/*
+
   release:
     name: Attach to release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [plugin, edge]
+    needs: [plugin, edge, testkit]
     runs-on: ubuntu-latest
     permissions:
       contents: write
