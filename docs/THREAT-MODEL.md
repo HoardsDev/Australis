@@ -10,6 +10,19 @@ stop it.
 - **Bucket B** = exhausts bandwidth (uplink). Needs upstream capacity.
 - Layers: **L0** edge/tunnel · **L1** XDP/eBPF kernel filter · **L2** Velocity plugin.
 
+> ## ⚠️ Implementation status (read before trusting a row)
+> This is the *design* map. What ships **today**:
+> - **L2** (Velocity + Paper plugin) — ✅ built & tested.
+> - **L0** — ✅ TCP forwarder (origin hiding, PROXY v2) + free-tunnel option.
+> - **L3/L4 enforcement** — ✅ **nftables**: an in-kernel blocklist fed by the L2
+>   feedback loop (drops any convicted IP; live-validated), plus a **basic global
+>   SYN rate-limit** fallback (~40/s, *not* line-rate).
+> - **L1 (XDP/eBPF)** — 🚧 **NOT implemented yet.** Every "L1" defense below
+>   (in-kernel MC-protocol validation, VarInt checks, line-rate SYN/pps drop,
+>   amplification source-port drop) is **planned**, not shipped. Until it lands,
+>   those attacks are handled only as far as the nftables fallback + L2 allow.
+>   See `edge/xdp/README.md` and `ARCHITECTURE.md §6`.
+
 ---
 
 ## L7 — application-layer (the common, server-killing stuff)
@@ -63,15 +76,23 @@ stop it.
 - **How:** Flood of TCP SYNs that never complete, exhausting the connection table.
 - **Bucket:** C (pps) until it exceeds bandwidth, then B
 - **Defense:**
-  - **L1:** SYN rate-limiting (default 10 SYN / 3s / IP) + `XDP_DROP`; SYN
-    cookies. Kernel handles millions of pps.
+  - **Today (nftables):** a basic global SYN rate-limit (~40 new SYN/s, burst 60)
+    as a fallback, plus kernel SYN-cookies if the OS has them enabled
+    (`net.ipv4.tcp_syncookies`). This blunts a small SYN flood but is *not*
+    line-rate and applies box-wide.
+  - **L1 (planned):** per-IP SYN rate-limiting + `XDP_DROP` at the NIC for
+    millions of pps. Not shipped yet.
 
 ### 6. Garbage / invalid-protocol UDP/TCP flood on the game port
 - **How:** Random bytes or non-MC protocol aimed at the port to burn pps.
 - **Bucket:** C until bandwidth, then B
 - **Defense:**
-  - **L1:** anything that isn't a valid MC (Java TCP) / RakNet (Bedrock UDP)
-    packet is dropped in the driver. This is the biggest single CPU-saver.
+  - **L1 (planned):** anything that isn't a valid MC (Java TCP) / RakNet (Bedrock
+    UDP) packet is dropped in the driver — the biggest single CPU-saver. **Not
+    shipped yet.**
+  - **Today:** garbage TCP that completes a connection is bounded by the
+    forwarder's per-IP/global caps + idle timeout; the origin never sees it. Pure
+    non-MC L4 junk still costs the box until the XDP filter lands.
 
 ### 7. Amplification / reflection (DNS/NTP/memcached → your port)
 - **How:** Spoofed requests to third parties that reflect amplified replies at you.
