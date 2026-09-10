@@ -107,6 +107,35 @@ verification at the plugin, IP hidden, feedback loop active.
 
 ---
 
+## Deep verification (optional): route bots through a limbo
+
+The reconnect challenge stops dumb flood bots (they never reconnect). Smarter
+bots that *do* reconnect are caught by sending **not-yet-verified** players to a
+lightweight **limbo** backend first, which runs movement/keep-alive checks before
+they can reach the real server. This is attack-gated by default, so real players
+are untouched in normal operation.
+
+1. Run a limbo backend — **NanoLimbo** (tiny, standalone) or a Paper server with
+   **Sonar** — and register it in `velocity.toml`, e.g.:
+   ```
+   [servers]
+   limbo = "127.0.0.1:30066"
+   ```
+2. In `plugins/australis/config.yml`:
+   ```yaml
+   verification:
+     limbo:
+       enabled: true
+       only-during-attack: true    # false = always route unverified players via limbo
+       server: "limbo"             # must match the velocity.toml server name
+       fallback-server: ""         # blank = first non-limbo server
+   ```
+3. The limbo backend signals a pass on the `australis:verify` plugin channel;
+   Australis then marks the IP verified and moves the player to a real server.
+   (NanoLimbo needs a small plugin/config to emit that message; Sonar-style
+   movement checks are the alternative. This flow needs a live limbo backend to
+   exercise end-to-end — the routing logic itself is unit-tested.)
+
 ## Verifying it works
 - **Plugin state:** `/australis stats` (needs `australis.admin`) — shows attack
   state, blocked counts, verified IPs, and edge pushes.

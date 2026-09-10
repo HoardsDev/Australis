@@ -3,6 +3,11 @@
 Ordered by value-per-effort. Each phase is independently useful — ship as you go.
 `[x]` = done in this repo, `[~]` = partial / API-limited (see note), `[ ]` = todo.
 
+> Also see `CHANGELOG.md` for recent changes and `FINDINGS-live-test.md` for the
+> live flood-test results that shaped the current priorities. As of 2026-09-10 the
+> plugin + edge + nftables stack is hardened, security-audited, and live-validated;
+> XDP is the main remaining item.
+
 ## Phase 1 — L7 plugin core ✅
 **Deliverable:** a Velocity plugin that already stops most attacks.
 - [x] Project scaffold (Gradle wrapper, plugin main, config)
@@ -12,9 +17,13 @@ Ordered by value-per-effort. Each phase is independently useful — ship as you 
 - [x] Status/ping response cache + per-IP ping rate limit
 - [x] Config schema + live hot reload (`/australis reload`)
 - [x] Metrics counters + `/australis stats` command
-- [~] Netty early-rejection *below* the public API — the public event pipeline
-      (PreLogin) already rejects pre-auth; true Netty-pipeline rejection is the
-      deep path shared with Phase 2 below.
+- [x] Detection + per-IP connection limiting at the earliest event
+      (`ConnectionHandshakeEvent`), enforced at `PreLogin`. NOTE: Velocity's own
+      `login-ratelimit` sits upstream of all plugin events, so single-/few-IP
+      connection floods are handled by Velocity before the plugin — see
+      `FINDINGS-live-test.md`.
+- [~] True Netty-pipeline rejection (Sonar-style, ahead of `login-ratelimit`) —
+      v2; would let the plugin drop floods it currently only detects.
 
 ## Phase 2 — Bot verification ✅ (API-level) / [ ] (deep)
 **Deliverable:** near-total bot-join immunity.
@@ -23,9 +32,10 @@ Ordered by value-per-effort. Each phase is independently useful — ship as you 
 - [x] Operator allowlist + manual `/australis verify|unverify`
 - [x] Pass → forward; fail → (via limiters) drop + feed to edge blocklist
 - [~] **Deep:** limbo *routing* is built (`LimboRouter` + `australis:verify`
-      plugin channel + PlayerChooseInitialServerEvent) and unit-tested; it needs
-      a limbo backend (NanoLimbo/Sonar) to run the actual movement/keep-alive
-      checks. Native Netty-level checks in-proxy remain a future option.
+      plugin channel + PlayerChooseInitialServerEvent), unit-tested, and now has a
+      setup guide (`DEPLOYMENT.md` → Deep verification). Still needs a live limbo
+      backend (NanoLimbo/Sonar) to exercise the movement/keep-alive round-trip
+      end-to-end. Native Netty-level checks in-proxy remain a future option.
 
 ## Phase 3 — Edge + feedback loop ✅ / XDP [ ]
 **Deliverable:** origin hiding + in-kernel drop of convicted IPs on a free VM

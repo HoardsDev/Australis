@@ -125,7 +125,7 @@ public final class AustralisPlugin {
                 config.verifyEnabled() ? "on" : "off",
                 config.verifyOnlyDuringAttack(),
                 config.edgeEnabled() ? "on -> " + config.edgeUrl() : "off");
-        logger.info("See docs/DEPLOYMENT.md to add the XDP edge (L3/L4 + IP hiding).");
+        logger.info("See docs/DEPLOYMENT.md for the edge (origin hiding + kernel blocklist feedback).");
     }
 
     @Subscribe
