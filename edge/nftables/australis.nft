@@ -12,6 +12,9 @@
 # program's job — see edge/xdp/README.md. The two compose: XDP throws away junk
 # at the NIC; this set drops the specific IPs the plugin has convicted.
 
+# The public game port. install-edge.sh rewrites this to match LISTEN's port.
+define GAME_PORT = 25565
+
 table inet australis {
     set blocklist {
         type ipv4_addr
@@ -27,14 +30,26 @@ table inet australis {
 
     chain input {
         # priority -150 runs this before the normal filter chains.
+        # policy accept so this table only ever *adds* drops — it never takes over
+        # the box's firewall or blocks anything it doesn't explicitly match.
         type filter hook input priority -150; policy accept;
 
+        # Never touch already-open flows or loopback — this is what keeps an
+        # admin's existing SSH session and local services alive under attack.
+        ct state established,related accept
+        iif "lo" accept
+
+        # Drop convicted sources outright (all ports — they are attackers).
         ip  saddr @blocklist  drop
         ip6 saddr @blocklist6 drop
 
-        # Lightweight SYN rate-limit as a fallback for boxes without the XDP
-        # filter loaded. XDP does this far more efficiently when present.
-        tcp flags & (fin|syn|rst|ack) == syn ct state new \
-            limit rate over 40/second burst 60 packets drop
+        # Fallback SYN/new-connection rate-limit — PER SOURCE IP and scoped to the
+        # game port only, so one attacker can't exhaust a shared budget and lock
+        # out SSH or other sources. This is a coarse safety net for boxes without
+        # the XDP filter; XDP does this far more efficiently and precisely.
+        tcp dport $GAME_PORT ct state new \
+            meter au_syn4 { ip  saddr limit rate over 40/second burst 60 packets } drop
+        tcp dport $GAME_PORT ct state new \
+            meter au_syn6 { ip6 saddr limit rate over 40/second burst 60 packets } drop
     }
 }

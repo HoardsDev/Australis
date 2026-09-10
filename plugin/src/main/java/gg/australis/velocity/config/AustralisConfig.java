@@ -3,7 +3,9 @@ package gg.australis.velocity.config;
 import gg.australis.core.ConfigSanitizer;
 import net.kyori.adventure.text.Component;
 import org.slf4j.Logger;
+import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -85,7 +87,11 @@ public final class AustralisConfig {
                 logger.info("Australis wrote default config to {}", file);
             }
             try (InputStream in = Files.newInputStream(file)) {
-                Map<String, Object> root = new Yaml().load(in);
+                // SafeConstructor: never instantiate arbitrary Java types from YAML
+                // tags, even if a host links an older SnakeYAML. config.yml is
+                // operator-owned, so this is defense-in-depth.
+                Yaml yaml = new Yaml(new SafeConstructor(new LoaderOptions()));
+                Map<String, Object> root = yaml.load(in);
                 if (root != null) {
                     cfg.apply(root);
                 }

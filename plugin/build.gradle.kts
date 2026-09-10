@@ -32,8 +32,11 @@ dependencies {
     compileOnly("com.velocitypowered:velocity-api:3.3.0-SNAPSHOT")
     annotationProcessor("com.velocitypowered:velocity-api:3.3.0-SNAPSHOT")
 
-    // Config (SnakeYAML is bundled with Velocity, but declare for clarity/tests).
+    // Config (SnakeYAML is bundled with Velocity at runtime, so compileOnly for
+    // the shaded jar; on the test classpath it must be present so AustralisConfig
+    // links (it references Yaml/SafeConstructor/LoaderOptions).
     compileOnly("org.yaml:snakeyaml:2.2")
+    testImplementation("org.yaml:snakeyaml:2.2")
 
     // Tests (the protection-logic classes are pure JDK and fully unit-tested).
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")

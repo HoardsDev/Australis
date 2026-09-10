@@ -17,12 +17,14 @@
 package main
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -46,7 +48,10 @@ type server struct {
 
 func main() {
 	listen := flag.String("listen", "127.0.0.1:8787", "address to listen on (bind to your private link, not 0.0.0.0)")
-	token := flag.String("token", "", "shared bearer token (required, must match plugin config)")
+	// Prefer the TOKEN env var so the secret never appears in the process's
+	// command line (world-readable via /proc/<pid>/cmdline and `ps`). The -token
+	// flag remains for manual/testing use but is discouraged for that reason.
+	token := flag.String("token", os.Getenv("TOKEN"), "shared bearer token (required; prefer the TOKEN env var over this flag)")
 	table := flag.String("table", "inet australis", "nftables table (family + name)")
 	set4 := flag.String("set4", "blocklist", "nftables ipv4 set name")
 	set6 := flag.String("set6", "blocklist6", "nftables ipv6 set name")
@@ -122,8 +127,9 @@ func (s *server) handleBlock(w http.ResponseWriter, r *http.Request) {
 func (s *server) authorized(r *http.Request) bool {
 	auth := r.Header.Get("Authorization")
 	want := "Bearer " + s.token
-	// constant-ish comparison
-	return len(auth) == len(want) && subtleEqual(auth, want)
+	// Constant-time compare (returns 0 on length mismatch) to avoid leaking the
+	// token via response timing.
+	return subtle.ConstantTimeCompare([]byte(auth), []byte(want)) == 1
 }
 
 func (s *server) addToSet(set, ip string, banSeconds int) error {
@@ -145,17 +151,6 @@ func realNft(args ...string) error {
 		return fmt.Errorf("%v: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
-}
-
-func subtleEqual(a, b string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	var v byte
-	for i := 0; i < len(a); i++ {
-		v |= a[i] ^ b[i]
-	}
-	return v == 0
 }
 
 func sanitize(s string) string {

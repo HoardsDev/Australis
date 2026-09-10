@@ -70,6 +70,39 @@ public final class EdgeClient {
         this.baseUrl = baseUrl;
         this.token = token;
         this.banSeconds = banSeconds;
+        if (enabled && baseUrl != null && baseUrl.startsWith("http://") && !isPrivateHost(baseUrl)) {
+            logger.warn("Australis edge URL is plaintext HTTP to a non-private host ({}). "
+                    + "The token and blocked IPs travel in cleartext — use HTTPS or reach the "
+                    + "edge over a private link (WireGuard/Tailscale).", baseUrl);
+        }
+    }
+
+    /** True if the URL's host is loopback or an RFC1918/CGNAT/ULA private address. */
+    private static boolean isPrivateHost(String url) {
+        try {
+            String h = URI.create(url).getHost();
+            if (h == null) {
+                return false;
+            }
+            if (h.equals("localhost") || h.startsWith("127.") || h.equals("::1")
+                    || h.startsWith("10.") || h.startsWith("192.168.")
+                    || h.startsWith("fd") || h.startsWith("fc")) {
+                return true;
+            }
+            String[] p = h.split("\\.");
+            if (p.length > 1) {
+                try {
+                    int o = Integer.parseInt(p[1]);
+                    if (h.startsWith("172.") && o >= 16 && o <= 31) return true;   // RFC1918
+                    if (h.startsWith("100.") && o >= 64 && o <= 127) return true;  // CGNAT (Tailscale)
+                } catch (NumberFormatException ignored) {
+                    // hostname, not a dotted IP — treat as non-private
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /** Ask the edge to drop this IP at the kernel. Non-blocking, de-duplicated. */
@@ -89,7 +122,7 @@ public final class EdgeClient {
         try {
             String body = String.format(
                     "{\"ip\":\"%s\",\"ban_seconds\":%d,\"reason\":\"%s\"}",
-                    ip, banSeconds, reason.replace("\"", ""));
+                    jsonEscape(ip), banSeconds, jsonEscape(reason));
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(URI.create(baseUrl.replaceAll("/+$", "") + "/block"))
                     .timeout(Duration.ofSeconds(3))
@@ -106,6 +139,31 @@ public final class EdgeClient {
         } catch (Exception e) {
             logger.debug("Australis edge unreachable for {}: {}", ip, e.getMessage());
         }
+    }
+
+    /** Minimal JSON string escaping (quotes, backslash, control chars). */
+    private static String jsonEscape(String s) {
+        if (s == null) {
+            return "";
+        }
+        StringBuilder b = new StringBuilder(s.length() + 8);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '"':  b.append("\\\""); break;
+                case '\\': b.append("\\\\"); break;
+                case '\n': b.append("\\n"); break;
+                case '\r': b.append("\\r"); break;
+                case '\t': b.append("\\t"); break;
+                default:
+                    if (c < 0x20) {
+                        b.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        b.append(c);
+                    }
+            }
+        }
+        return b.toString();
     }
 
     public void housekeeping() {

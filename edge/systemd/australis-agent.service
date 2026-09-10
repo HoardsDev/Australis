@@ -7,8 +7,10 @@ Requires=australis-nftables.service
 [Service]
 Type=simple
 EnvironmentFile=/etc/australis/agent.env
-# LISTEN and TOKEN come from the env file. TOKEN must match the plugin config.
-ExecStart=/opt/australis/agent -listen ${LISTEN} -token ${TOKEN}
+# LISTEN and TOKEN come from the env file. The agent reads TOKEN from the
+# environment (never passed on argv, so it can't be read from /proc/<pid>/cmdline
+# or `ps`). TOKEN must match the plugin config.
+ExecStart=/opt/australis/agent -listen ${LISTEN}
 Restart=always
 RestartSec=2
 # Needs CAP_NET_ADMIN to run `nft add element`.

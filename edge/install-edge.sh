@@ -77,7 +77,9 @@ else
 fi
 
 log "writing config..."
-cp "$SCRIPT_DIR/nftables/australis.nft" /etc/australis/australis.nft
+# Scope the fallback SYN rate-limit to the actual game port.
+sed "s/^define GAME_PORT = .*/define GAME_PORT = $PORT/" \
+    "$SCRIPT_DIR/nftables/australis.nft" > /etc/australis/australis.nft
 cat > /etc/australis/forwarder.env <<EOF
 LISTEN=$LISTEN
 ORIGIN=$ORIGIN
@@ -96,7 +98,11 @@ cat > /etc/australis/xdp.env <<EOF
 IFACE=$IFACE
 PORT=$PORT
 EOF
-chmod 600 /etc/australis/agent.env
+# Lock down the config dir + secret-bearing env files. forwarder.env holds the
+# hidden ORIGIN address (the whole point of the product is to keep it secret) and
+# agent.env holds the shared token, so neither may be world-readable.
+chmod 700 /etc/australis
+chmod 600 /etc/australis/agent.env /etc/australis/forwarder.env /etc/australis/xdp.env
 
 log "installing systemd units..."
 # The xdp unit is installed so the file exists and is internally consistent, but
@@ -111,6 +117,17 @@ systemctl enable --now australis-nftables.service
 systemctl enable --now australis-agent.service
 systemctl enable --now australis-forwarder.service
 
+# Players must be able to reach the game port on THIS edge box. Open it on the
+# host firewall if ufw is active. NOTE: on cloud VMs (Oracle/AWS/GCP) you must
+# ALSO open it in the provider's security list / NSG — the installer can't do that.
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+    ufw allow "${PORT}/tcp" >/dev/null 2>&1 && log "opened ${PORT}/tcp in ufw"
+fi
+
+# Best-effort detect this edge's public IP for the origin-lockdown hint below.
+EDGE_IP="$(ip -4 addr show "$IFACE" 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -n1)"
+ORIGIN_PORT="${ORIGIN##*:}"
+
 log "done."
 echo
 echo "  Edge is up. Players connect to this box on ${LISTEN}; it forwards to ${ORIGIN}."
@@ -121,8 +138,12 @@ echo "         enabled: true"
 echo "         url: \"http://${AGENT_LISTEN}\"    # reach this over your private link (WireGuard)"
 echo "         token: \"${TOKEN}\""
 echo
-echo "  2) Enable proxy-protocol on the ORIGIN Velocity (velocity.toml: proxy-protocol = true)."
-echo "  3) Lock the origin so its game port only accepts this edge (docs/DEPLOYMENT.md)."
+echo "  2) On the ORIGIN Velocity, set (velocity.toml, [advanced]):  haproxy-protocol = true"
+echo "  3) Lock the origin so its game port ONLY accepts this edge — otherwise anyone"
+echo "     who finds the origin IP can forge any client IP via PROXY protocol. On the ORIGIN:"
+echo "       sudo ufw allow from ${EDGE_IP:-<EDGE_IP>} to any port ${ORIGIN_PORT} proto tcp"
+echo "       sudo ufw deny  ${ORIGIN_PORT}/tcp"
+echo "  4) Open ${PORT}/tcp in your cloud provider's security list / NSG (not just ufw)."
 echo
 echo "  Active now: nftables blocklist, feedback agent, TCP forwarder"
 echo "  (global cap ${MAX_CONNS}, per-IP cap ${MAX_CONNS_PER_IP}, idle timeout ${IDLE_TIMEOUT})."
