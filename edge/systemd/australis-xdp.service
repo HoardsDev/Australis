@@ -1,13 +1,18 @@
 [Unit]
-Description=Australis XDP/eBPF Minecraft filter (line-rate L3/L4 + protocol)
+Description=Australis XDP/eBPF Minecraft filter (line-rate L3/L4 + protocol) — OPTIONAL, not active by default
 After=network-online.target
 Wants=network-online.target
 Before=australis-forwarder.service
+# There is NO bundled XDP loader yet (edge/xdp/ is a README only). This unit is
+# installed but inert: ConditionPathExists means systemd skips it until you have
+# actually installed a loader at /opt/australis/xdp-loader. See edge/xdp/README.md.
+# Do not assume XDP filtering is running just because this unit is enabled.
+ConditionPathExists=/opt/australis/xdp-loader
 
 [Service]
 Type=simple
 EnvironmentFile=/etc/australis/xdp.env
-# IFACE and PORT come from the env file. This wraps the vendored open-source
+# IFACE and PORT come from the env file. This wraps a vendored open-source
 # Minecraft XDP loader (see edge/xdp/README.md); adjust the flags to match the
 # loader you install.
 ExecStart=/opt/australis/xdp-loader --iface ${IFACE} --port ${PORT} --syn-rate 10 --syn-window 3

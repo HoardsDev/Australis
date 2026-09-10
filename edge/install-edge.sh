@@ -7,12 +7,20 @@
 #
 #   sudo ORIGIN=10.8.0.1:25565 ./install-edge.sh
 #
+# This script is idempotent: re-running it preserves the existing agent TOKEN
+# (so you don't have to re-edit the plugin config) unless you pass TOKEN=... to
+# force a new one.
+#
 # Environment variables:
-#   ORIGIN        (required) hidden origin address host:port the edge forwards to
-#   LISTEN        public listen address           (default :25565)
-#   AGENT_LISTEN  feedback agent bind address     (default 127.0.0.1:8787)
-#   IFACE         NIC for the XDP filter          (default: auto-detected)
-#   TOKEN         shared token for the agent      (default: generated)
+#   ORIGIN            (required) hidden origin address host:port the edge forwards to
+#   LISTEN            public listen address                 (default :25565)
+#   AGENT_LISTEN      feedback agent bind address           (default 127.0.0.1:8787)
+#   IFACE             NIC for the (optional) XDP filter     (default: auto-detected)
+#   TOKEN             shared token for the agent            (default: reuse existing / generate)
+#   MAX_CONNS         forwarder global concurrency cap      (default 8192)
+#   MAX_CONNS_PER_IP  forwarder per-source-IP cap           (default 64)
+#   IDLE_TIMEOUT      forwarder idle/slowloris timeout      (default 5m)
+#   METRICS           forwarder metrics endpoint addr       (default: empty/disabled, e.g. 127.0.0.1:9100)
 #
 # After it runs, put the printed TOKEN + AGENT_LISTEN into the plugin's
 # config.yml `edge:` section, and lock down the origin (see docs/DEPLOYMENT.md).
@@ -23,6 +31,16 @@ LISTEN="${LISTEN:-:25565}"
 AGENT_LISTEN="${AGENT_LISTEN:-127.0.0.1:8787}"
 ORIGIN="${ORIGIN:-}"
 IFACE="${IFACE:-$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')}"
+MAX_CONNS="${MAX_CONNS:-8192}"
+MAX_CONNS_PER_IP="${MAX_CONNS_PER_IP:-64}"
+IDLE_TIMEOUT="${IDLE_TIMEOUT:-5m}"
+METRICS="${METRICS:-}"
+
+# Idempotent token handling: reuse the token from a previous install unless the
+# caller explicitly overrode TOKEN, otherwise generate a fresh one.
+if [ -z "${TOKEN:-}" ] && [ -f /etc/australis/agent.env ]; then
+    TOKEN="$(sed -n 's/^TOKEN=//p' /etc/australis/agent.env | head -n1)"
+fi
 TOKEN="${TOKEN:-$(head -c 24 /dev/urandom | base64 | tr -d '/+=' | head -c 32)}"
 
 PORT="${LISTEN##*:}"
@@ -63,11 +81,17 @@ cp "$SCRIPT_DIR/nftables/australis.nft" /etc/australis/australis.nft
 cat > /etc/australis/forwarder.env <<EOF
 LISTEN=$LISTEN
 ORIGIN=$ORIGIN
+MAX_CONNS=$MAX_CONNS
+MAX_CONNS_PER_IP=$MAX_CONNS_PER_IP
+IDLE_TIMEOUT=$IDLE_TIMEOUT
+METRICS=$METRICS
 EOF
 cat > /etc/australis/agent.env <<EOF
 LISTEN=$AGENT_LISTEN
 TOKEN=$TOKEN
 EOF
+# xdp.env is written for convenience if you later install an XDP loader; the
+# australis-xdp.service is inert until /opt/australis/xdp-loader exists.
 cat > /etc/australis/xdp.env <<EOF
 IFACE=$IFACE
 PORT=$PORT
@@ -75,9 +99,13 @@ EOF
 chmod 600 /etc/australis/agent.env
 
 log "installing systemd units..."
+# The xdp unit is installed so the file exists and is internally consistent, but
+# it is NOT enabled or started: it has ConditionPathExists=/opt/australis/xdp-loader
+# and there is no bundled loader yet, so it stays inert. See edge/xdp/README.md.
 cp "$SCRIPT_DIR"/systemd/australis-nftables.service \
    "$SCRIPT_DIR"/systemd/australis-forwarder.service \
-   "$SCRIPT_DIR"/systemd/australis-agent.service /etc/systemd/system/
+   "$SCRIPT_DIR"/systemd/australis-agent.service \
+   "$SCRIPT_DIR"/systemd/australis-xdp.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now australis-nftables.service
 systemctl enable --now australis-agent.service
@@ -95,5 +123,15 @@ echo "         token: \"${TOKEN}\""
 echo
 echo "  2) Enable proxy-protocol on the ORIGIN Velocity (velocity.toml: proxy-protocol = true)."
 echo "  3) Lock the origin so its game port only accepts this edge (docs/DEPLOYMENT.md)."
-echo "  4) (Recommended) Add the XDP filter for line-rate L3/L4: edge/xdp/README.md,"
-echo "     then: systemctl enable --now australis-xdp.service"
+echo
+echo "  Active now: nftables blocklist, feedback agent, TCP forwarder"
+echo "  (global cap ${MAX_CONNS}, per-IP cap ${MAX_CONNS_PER_IP}, idle timeout ${IDLE_TIMEOUT})."
+if [ -n "$METRICS" ]; then
+    echo "  Forwarder metrics: http://${METRICS}/metrics"
+fi
+echo
+echo "  NOT active: XDP/eBPF line-rate filter. There is no bundled loader yet —"
+echo "  edge/xdp/ is a design note. The australis-xdp.service unit is installed but"
+echo "  inert (it only starts once /opt/australis/xdp-loader exists). To add it later,"
+echo "  follow edge/xdp/README.md to build/install a loader, then:"
+echo "       systemctl enable --now australis-xdp.service"

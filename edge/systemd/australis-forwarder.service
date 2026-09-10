@@ -6,8 +6,11 @@ Wants=network-online.target
 [Service]
 Type=simple
 EnvironmentFile=/etc/australis/forwarder.env
-# LISTEN, ORIGIN set in the env file.
-ExecStart=/opt/australis/forwarder -listen ${LISTEN} -origin ${ORIGIN} -proxy-protocol
+# LISTEN, ORIGIN, MAX_CONNS, MAX_CONNS_PER_IP, IDLE_TIMEOUT are set in the env
+# file (install-edge.sh always writes them). METRICS is optional: the binary
+# reads it from the environment as the default for -metrics, so an empty METRICS
+# leaves the endpoint disabled without needing a flag here.
+ExecStart=/opt/australis/forwarder -listen ${LISTEN} -origin ${ORIGIN} -proxy-protocol -max-conns ${MAX_CONNS} -max-conns-per-ip ${MAX_CONNS_PER_IP} -idle-timeout ${IDLE_TIMEOUT}
 Restart=always
 RestartSec=2
 DynamicUser=yes
