@@ -6,6 +6,9 @@ All notable changes to Australis. Format loosely follows
 ## [Unreleased]
 
 ### Added
+- **`testkit/lab.sh`** — self-attack regression lab: runs a matrix of floodtest
+  scenarios against a target you own and writes a summary table, for
+  baseline-vs-protected comparison after changes.
 - **`limbo/` — the limbo verifier plugin**, completing deep verification: a Paper
   plugin that holds routed clients, checks for real-client behaviour, and signals
   `australis:verify`; the proxy then promotes the IP and moves them to a real

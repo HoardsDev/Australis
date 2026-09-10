@@ -71,4 +71,5 @@ See `docs/HOSTED-EDGE.md`.
 - [ ] Paper-direct mode (servers without a proxy)
 - [ ] Bedrock/RakNet edge (Upioti XDP filter)
 - [ ] IPv6 in the XDP path (current open-source filters are IPv4-only)
-- [ ] Self-attack test lab (your infra only) for regression testing
+- [x] Self-attack test lab (your infra only) for regression testing —
+      `testkit/lab.sh` (scenario matrix → summary table; baseline-vs-protected diff)

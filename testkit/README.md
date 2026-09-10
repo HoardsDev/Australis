@@ -64,7 +64,21 @@ attempts / engaged / rejected / reset / errors + latency p50/p95/p99
 3. Watch `/australis stats` on the proxy during the run to see blocks, the attack
    detector flipping on, and (in Mode B) edge blocklist pushes.
 
+## Regression lab (`lab.sh`)
+`lab.sh` runs a whole matrix of scenarios in one go and writes a timestamped
+report + a markdown summary table, so you can re-run it after changes and compare.
+```bash
+go build -o floodtest ./cmd/floodtest
+./lab.sh play.example.net:25565 --i-own-this-target
+# custom matrix ("mode c rate duration", one per line):
+LAB_SCENARIOS=$'ping 100 0 10s\njoin 200 0 10s' ./lab.sh play.example.net:25565 --i-own-this-target
+```
+Run it once with Australis off (baseline) and once on, then diff the two
+`summary.md` files to see the protection's effect. Same `--i-own-this-target`
+gate — your infra only.
+
 ## Tested
 Protocol helpers (VarInt, framing, handshake, login start) are unit-tested
-(`go test ./...`), and the ping path was validated end-to-end against a mock
-status server.
+(`go test ./...`); the ping path was validated end-to-end against a mock status
+server; and `lab.sh` is validated against a live proxy (see
+`docs/FINDINGS-live-test.md`).
