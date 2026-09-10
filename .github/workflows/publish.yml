@@ -1,0 +1,38 @@
+name: publish-jars
+
+# Builds the plugin jars and publishes them to the `builds` branch under dist/,
+# so they can be fetched over git (and handed to the user) without the Actions UI.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Build jars
+        run: |
+          (cd plugin && chmod +x gradlew && ./gradlew shadowJar --no-daemon --console=plain)
+          (cd paper && chmod +x gradlew && ./gradlew shadowJar --no-daemon --console=plain)
+      - name: Publish to builds branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/pub/dist
+          cp plugin/build/libs/*.jar /tmp/pub/dist/
+          cp paper/build/libs/*.jar /tmp/pub/dist/
+          printf '# Australis built jars\n\nAuto-published from main (%s).\n\n- `australis-paper-*.jar` — drop into a Paper/Spigot server (a Paper server) `plugins/`\n- `australis-velocity-*.jar` — drop into a Velocity proxy `plugins/`\n' "$GITHUB_SHA" > /tmp/pub/README.md
+          cd /tmp/pub
+          git init -q
+          git checkout -b builds
+          git add .
+          git -c user.email="actions@github.com" -c user.name="Australis CI" commit -q -m "Built jars from ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" builds
