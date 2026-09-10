@@ -1,0 +1,76 @@
+# Australis configuration
+# Free, self-hosted L7 DDoS/bot protection for Minecraft (BungeeCord/Waterfall).
+# Times are in milliseconds unless noted. Tune to your server's real traffic.
+# Reload live with:  /australis reload
+
+# --- Per-IP new-connection flood limiter ---
+connections:
+  max-per-window: 8      # allowed new connections...
+  window-millis: 3000    # ...per this window per IP
+  block-millis: 30000    # temp-ban duration once tripped
+
+# --- Per-IP status/MOTD ping limiter + response cache ---
+pings:
+  max-per-window: 20
+  window-millis: 3000
+  block-millis: 10000
+  cache-millis: 1000     # serve one cached ping to everyone for this long (0 = off)
+
+# --- Per-IP login/auth abuse + connect/disconnect churn ---
+login:
+  max-per-window: 6
+  window-millis: 5000
+  max-churn: 4           # rapid connect/disconnect cycles allowed before blocking
+
+# --- Global attack detector (flips on aggressive defences only during an attack) ---
+attack-detector:
+  connections-per-second: 60   # aggregate new-conns/sec that counts as "under attack"
+  cooldown-millis: 30000       # stay in attack mode this long after the last spike
+
+# --- Bot verification (reconnect challenge) ---
+verification:
+  enabled: true
+  only-during-attack: true     # true = real players never challenged in normal operation
+  reconnect-window-millis: 15000  # a challenged client must reconnect within this window
+  verified-ttl-millis: 3600000    # trust an IP for 1h after a successful session
+  pending-ttl-millis: 60000
+  kick-message: "§bAustralis §7» §fVerifying connection… please reconnect."
+  allowlist: []                # IPs that are always trusted, e.g. ["203.0.113.5"]
+  # Deep verification: route unverified players to a limbo backend first (e.g.
+  # NanoLimbo, or a Paper server running Sonar). The limbo server does the
+  # movement/keep-alive checks and sends a message on the "australis:verify"
+  # plugin channel when a player passes; Australis then moves them to a real
+  # server. Requires a limbo server registered in config.yml (BungeeCord).
+  limbo:
+    enabled: false
+    only-during-attack: true
+    server: "limbo"            # name of the limbo server in BungeeCord's config.yml
+    fallback-server: ""        # where to send verified players (blank = first non-limbo server)
+
+# --- Edge feedback loop (Phase 3): push confirmed abusers to the kernel ---
+# Point this at the Australis edge agent (see docs/DEPLOYMENT.md Mode B).
+# When enabled, blocked IPs are dropped in the kernel (nftables set today; the
+# XDP map is a planned upgrade).
+edge:
+  enabled: false
+  # Reach the agent over a PRIVATE link (WireGuard/Tailscale). Plain http:// is
+  # fine only on such a link; use https:// for any routable address (the token
+  # and blocked IPs travel in the request).
+  url: "http://10.8.0.2:8787"
+  token: "change-me"            # must match the agent's TOKEN (env on the edge box)
+  ban-seconds: 600              # how long the edge should drop the IP
+
+# --- Prometheus metrics (optional) ---
+# Exposes /metrics (Prometheus text) and /health. Bind to loopback or a private
+# link — the counters aren't sensitive but there is no auth. Off by default.
+metrics:
+  enabled: false
+  bind: "127.0.0.1:9110"
+
+# --- Memory housekeeping ---
+housekeeping:
+  prune-interval-millis: 60000
+  entry-ttl-millis: 300000
+
+log-blocks: true
+kick-message: "§bAustralis §7» §fYou are connecting too quickly. Try again shortly."

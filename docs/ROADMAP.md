@@ -69,7 +69,8 @@ See `docs/HOSTED-EDGE.md`.
 ## Cross-cutting
 - [x] Prometheus `/metrics` on the plugin (Velocity + Paper) and the edge
       forwarder — point Prometheus at them; a Grafana dashboard is just a panel set
-- [ ] BungeeCord/Waterfall port of the plugin
+- [x] BungeeCord/Waterfall port of the plugin — `bungee/` (reuses `common/`;
+      exploits Bungee's cancellable PreLogin + real ping caching)
 - [ ] Paper-direct mode (servers without a proxy)
 - [ ] Bedrock/RakNet edge (Upioti XDP filter)
 - [ ] IPv6 in the XDP path (current open-source filters are IPv4-only)

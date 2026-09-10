@@ -1,0 +1,297 @@
+package gg.australis.bungee.config;
+
+import gg.australis.core.ConfigSanitizer;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.logging.Logger;
+
+/**
+ * YAML-backed configuration for all Australis subsystems (BungeeCord port).
+ * Immutable snapshot: {@link #loadOrCreate} builds a fresh instance and the
+ * plugin swaps its reference on reload, calling {@code reconfigure(...)} on each
+ * component.
+ *
+ * <p>Mirrors the Velocity {@code gg.australis.velocity.config.AustralisConfig}
+ * schema and validation exactly. Kick messages are returned as raw legacy
+ * strings (the plugin converts them to Bungee components with
+ * {@code TextComponent.fromLegacyText}); everything else is identical.
+ */
+public final class AustralisConfig {
+
+    // Connection limiter (per IP)
+    private int maxConnectionsPerWindow = 8;
+    private long connectionWindowMillis = 3_000;
+    private long connectionBlockMillis = 30_000;
+
+    // Ping limiter (per IP)
+    private int maxPingsPerWindow = 20;
+    private long pingWindowMillis = 3_000;
+    private long pingBlockMillis = 10_000;
+    private long pingCacheMillis = 1_000;
+
+    // Login throttle (per IP)
+    private int maxLoginsPerWindow = 6;
+    private long loginWindowMillis = 5_000;
+    private int maxChurn = 4;
+
+    // Attack detector (global)
+    private int attackPerSecondThreshold = 60;
+    private long attackCooldownMillis = 30_000;
+
+    // Verification (Phase 2)
+    private boolean verifyEnabled = true;
+    private boolean verifyOnlyDuringAttack = true;
+    private long verifyReconnectWindowMillis = 15_000;
+    private long verifyVerifiedTtlMillis = 3_600_000;
+    private long verifyPendingTtlMillis = 60_000;
+    private Set<String> verifyAllowlist = Set.of();
+    private String verifyKickMessage = "§bAustralis §7» §fVerifying connection… please reconnect.";
+
+    // Deep verification: limbo routing (Phase 2 deep)
+    private boolean limboEnabled = false;
+    private boolean limboOnlyDuringAttack = true;
+    private String limboServer = "limbo";
+    private String limboFallback = "";
+
+    // Edge feedback (Phase 3)
+    private boolean edgeEnabled = false;
+    private String edgeUrl = "";
+    private String edgeToken = "";
+    private long edgeBanSeconds = 600;
+
+    // Prometheus metrics (optional)
+    private boolean metricsEnabled = false;
+    private String metricsBind = "127.0.0.1:9110";
+
+    // Housekeeping
+    private long pruneIntervalMillis = 60_000;
+    private long entryTtlMillis = 300_000;
+
+    // Behaviour
+    private boolean logBlocks = true;
+    private String kickMessage = "§bAustralis §7» §fYou are connecting too quickly. Try again shortly.";
+
+    public static AustralisConfig loadOrCreate(Path dataDir, Logger logger) {
+        AustralisConfig cfg = new AustralisConfig();
+        try {
+            Files.createDirectories(dataDir);
+            Path file = dataDir.resolve("config.yml");
+            if (Files.notExists(file)) {
+                try (InputStream in = AustralisConfig.class.getResourceAsStream("/config.yml");
+                     OutputStream out = Files.newOutputStream(file)) {
+                    if (in != null) {
+                        in.transferTo(out);
+                    }
+                }
+                logger.info("Australis wrote default config to " + file);
+            }
+            try (InputStream in = Files.newInputStream(file)) {
+                // SafeConstructor: never instantiate arbitrary Java types from YAML
+                // tags. config.yml is operator-owned, so this is defense-in-depth.
+                Yaml yaml = new Yaml(new SafeConstructor(new LoaderOptions()));
+                Map<String, Object> root = yaml.load(in);
+                if (root != null) {
+                    cfg.apply(root);
+                }
+            }
+        } catch (IOException e) {
+            logger.warning("Australis could not load config, using defaults: " + e.getMessage());
+        } catch (RuntimeException e) {
+            // Malformed YAML (SnakeYAML throws unchecked) must never crash startup:
+            // fall back to a fully-default, already-valid config.
+            logger.warning("Australis config is malformed, using defaults: " + e.getMessage());
+            cfg = new AustralisConfig();
+        }
+        cfg.validate(logger::warning);
+        return cfg;
+    }
+
+    /**
+     * Build and validate a config straight from a parsed map. Package-private seam
+     * for unit tests (no filesystem / YAML / logger required); {@code loadOrCreate}
+     * is the production entry point.
+     */
+    static AustralisConfig fromMap(Map<String, Object> root, ConfigSanitizer.Warner warn) {
+        AustralisConfig cfg = new AustralisConfig();
+        if (root != null) {
+            cfg.apply(root);
+        }
+        cfg.validate(warn);
+        return cfg;
+    }
+
+    /**
+     * Clamp every numeric setting into a safe range, reporting anything changed.
+     * Runs after {@link #apply} so bad file values can't drive a component into a
+     * crash (e.g. a non-positive prune interval) or a permanent-attack / never-
+     * limit state (e.g. a zero window or threshold).
+     */
+    void validate(ConfigSanitizer.Warner warn) {
+        // Connection limiter
+        maxConnectionsPerWindow = ConfigSanitizer.clampInt(warn,
+                "connections.max-per-window", maxConnectionsPerWindow, 1, 1_000_000);
+        connectionWindowMillis = ConfigSanitizer.clampLong(warn,
+                "connections.window-millis", connectionWindowMillis, 1, 3_600_000);
+        connectionBlockMillis = ConfigSanitizer.clampLong(warn,
+                "connections.block-millis", connectionBlockMillis, 0, 86_400_000);
+        // Ping limiter
+        maxPingsPerWindow = ConfigSanitizer.clampInt(warn,
+                "pings.max-per-window", maxPingsPerWindow, 1, 1_000_000);
+        pingWindowMillis = ConfigSanitizer.clampLong(warn,
+                "pings.window-millis", pingWindowMillis, 1, 3_600_000);
+        pingBlockMillis = ConfigSanitizer.clampLong(warn,
+                "pings.block-millis", pingBlockMillis, 0, 86_400_000);
+        pingCacheMillis = ConfigSanitizer.clampLong(warn,
+                "pings.cache-millis", pingCacheMillis, 0, 60_000);
+        // Login throttle
+        maxLoginsPerWindow = ConfigSanitizer.clampInt(warn,
+                "login.max-per-window", maxLoginsPerWindow, 1, 1_000_000);
+        loginWindowMillis = ConfigSanitizer.clampLong(warn,
+                "login.window-millis", loginWindowMillis, 1, 3_600_000);
+        maxChurn = ConfigSanitizer.clampInt(warn,
+                "login.max-churn", maxChurn, 0, 1_000_000);
+        // Attack detector
+        attackPerSecondThreshold = ConfigSanitizer.clampInt(warn,
+                "attack-detector.connections-per-second", attackPerSecondThreshold, 1, 10_000_000);
+        attackCooldownMillis = ConfigSanitizer.clampLong(warn,
+                "attack-detector.cooldown-millis", attackCooldownMillis, 0, 86_400_000);
+        // Verification
+        verifyReconnectWindowMillis = ConfigSanitizer.clampLong(warn,
+                "verification.reconnect-window-millis", verifyReconnectWindowMillis, 1, 3_600_000);
+        verifyVerifiedTtlMillis = ConfigSanitizer.clampLong(warn,
+                "verification.verified-ttl-millis", verifyVerifiedTtlMillis, 1, 604_800_000L);
+        verifyPendingTtlMillis = ConfigSanitizer.clampLong(warn,
+                "verification.pending-ttl-millis", verifyPendingTtlMillis, 1, 3_600_000);
+        // Edge feedback
+        edgeBanSeconds = ConfigSanitizer.clampLong(warn,
+                "edge.ban-seconds", edgeBanSeconds, 0, 31_536_000L);
+        // Housekeeping — prune interval must be positive (a scheduled repeat rejects 0).
+        pruneIntervalMillis = ConfigSanitizer.clampLong(warn,
+                "housekeeping.prune-interval-millis", pruneIntervalMillis, 1_000, 3_600_000);
+        entryTtlMillis = ConfigSanitizer.clampLong(warn,
+                "housekeeping.entry-ttl-millis", entryTtlMillis, 0, 86_400_000);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void apply(Map<String, Object> root) {
+        Map<String, Object> conn = section(root, "connections");
+        maxConnectionsPerWindow = asInt(conn.get("max-per-window"), maxConnectionsPerWindow);
+        connectionWindowMillis = asLong(conn.get("window-millis"), connectionWindowMillis);
+        connectionBlockMillis = asLong(conn.get("block-millis"), connectionBlockMillis);
+
+        Map<String, Object> ping = section(root, "pings");
+        maxPingsPerWindow = asInt(ping.get("max-per-window"), maxPingsPerWindow);
+        pingWindowMillis = asLong(ping.get("window-millis"), pingWindowMillis);
+        pingBlockMillis = asLong(ping.get("block-millis"), pingBlockMillis);
+        pingCacheMillis = asLong(ping.get("cache-millis"), pingCacheMillis);
+
+        Map<String, Object> login = section(root, "login");
+        maxLoginsPerWindow = asInt(login.get("max-per-window"), maxLoginsPerWindow);
+        loginWindowMillis = asLong(login.get("window-millis"), loginWindowMillis);
+        maxChurn = asInt(login.get("max-churn"), maxChurn);
+
+        Map<String, Object> atk = section(root, "attack-detector");
+        attackPerSecondThreshold = asInt(atk.get("connections-per-second"), attackPerSecondThreshold);
+        attackCooldownMillis = asLong(atk.get("cooldown-millis"), attackCooldownMillis);
+
+        Map<String, Object> v = section(root, "verification");
+        verifyEnabled = asBool(v.get("enabled"), verifyEnabled);
+        verifyOnlyDuringAttack = asBool(v.get("only-during-attack"), verifyOnlyDuringAttack);
+        verifyReconnectWindowMillis = asLong(v.get("reconnect-window-millis"), verifyReconnectWindowMillis);
+        verifyVerifiedTtlMillis = asLong(v.get("verified-ttl-millis"), verifyVerifiedTtlMillis);
+        verifyPendingTtlMillis = asLong(v.get("pending-ttl-millis"), verifyPendingTtlMillis);
+        Object al = v.get("allowlist");
+        if (al instanceof List<?> list) {
+            verifyAllowlist = Set.copyOf(list.stream().map(String::valueOf).toList());
+        }
+        Object vmsg = v.get("kick-message");
+        if (vmsg instanceof String s) {
+            verifyKickMessage = s;
+        }
+        Map<String, Object> limbo = section(v, "limbo");
+        limboEnabled = asBool(limbo.get("enabled"), limboEnabled);
+        limboOnlyDuringAttack = asBool(limbo.get("only-during-attack"), limboOnlyDuringAttack);
+        limboServer = asString(limbo.get("server"), limboServer);
+        limboFallback = asString(limbo.get("fallback-server"), limboFallback);
+
+        Map<String, Object> edge = section(root, "edge");
+        edgeEnabled = asBool(edge.get("enabled"), edgeEnabled);
+        edgeUrl = asString(edge.get("url"), edgeUrl);
+        edgeToken = asString(edge.get("token"), edgeToken);
+        edgeBanSeconds = asLong(edge.get("ban-seconds"), edgeBanSeconds);
+
+        Map<String, Object> metrics = section(root, "metrics");
+        metricsEnabled = asBool(metrics.get("enabled"), metricsEnabled);
+        metricsBind = asString(metrics.get("bind"), metricsBind);
+
+        Map<String, Object> hk = section(root, "housekeeping");
+        pruneIntervalMillis = asLong(hk.get("prune-interval-millis"), pruneIntervalMillis);
+        entryTtlMillis = asLong(hk.get("entry-ttl-millis"), entryTtlMillis);
+
+        logBlocks = asBool(root.get("log-blocks"), logBlocks);
+        kickMessage = asString(root.get("kick-message"), kickMessage);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> section(Map<String, Object> root, String key) {
+        Object o = root.get(key);
+        return o instanceof Map ? (Map<String, Object>) o : Map.of();
+    }
+
+    private static int asInt(Object o, int def) { return o instanceof Number n ? n.intValue() : def; }
+    private static long asLong(Object o, long def) { return o instanceof Number n ? n.longValue() : def; }
+    private static boolean asBool(Object o, boolean def) { return o instanceof Boolean b ? b : def; }
+    private static String asString(Object o, String def) { return o instanceof String s ? s : def; }
+
+    // Connections
+    public int maxConnectionsPerWindow() { return maxConnectionsPerWindow; }
+    public long connectionWindowMillis() { return connectionWindowMillis; }
+    public long connectionBlockMillis() { return connectionBlockMillis; }
+    // Pings
+    public int maxPingsPerWindow() { return maxPingsPerWindow; }
+    public long pingWindowMillis() { return pingWindowMillis; }
+    public long pingBlockMillis() { return pingBlockMillis; }
+    public long pingCacheMillis() { return pingCacheMillis; }
+    // Login
+    public int maxLoginsPerWindow() { return maxLoginsPerWindow; }
+    public long loginWindowMillis() { return loginWindowMillis; }
+    public int maxChurn() { return maxChurn; }
+    // Attack detector
+    public int attackPerSecondThreshold() { return attackPerSecondThreshold; }
+    public long attackCooldownMillis() { return attackCooldownMillis; }
+    // Verification
+    public boolean verifyEnabled() { return verifyEnabled; }
+    public boolean verifyOnlyDuringAttack() { return verifyOnlyDuringAttack; }
+    public long verifyReconnectWindowMillis() { return verifyReconnectWindowMillis; }
+    public long verifyVerifiedTtlMillis() { return verifyVerifiedTtlMillis; }
+    public long verifyPendingTtlMillis() { return verifyPendingTtlMillis; }
+    public Set<String> verifyAllowlist() { return verifyAllowlist; }
+    public String verifyKickMessage() { return verifyKickMessage; }
+    public boolean limboEnabled() { return limboEnabled; }
+    public boolean limboOnlyDuringAttack() { return limboOnlyDuringAttack; }
+    public String limboServer() { return limboServer; }
+    public String limboFallback() { return limboFallback; }
+    // Edge
+    public boolean edgeEnabled() { return edgeEnabled; }
+    public String edgeUrl() { return edgeUrl; }
+    public String edgeToken() { return edgeToken; }
+    public long edgeBanSeconds() { return edgeBanSeconds; }
+    public boolean metricsEnabled() { return metricsEnabled; }
+    public String metricsBind() { return metricsBind; }
+    // Housekeeping
+    public long pruneIntervalMillis() { return pruneIntervalMillis; }
+    public long entryTtlMillis() { return entryTtlMillis; }
+    // Behaviour
+    public boolean logBlocks() { return logBlocks; }
+    public String kickMessage() { return kickMessage; }
+}

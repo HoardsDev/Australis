@@ -6,7 +6,11 @@ All notable changes to Australis. Format loosely follows
 ## [Unreleased]
 
 ### Added
-- **Prometheus metrics** on the Velocity & Paper plugins (opt-in `metrics.enabled`
+- **`bungee/` — BungeeCord/Waterfall port**, feature-parity with the Velocity
+  plugin, reusing `common/` verbatim. Exploits Bungee's cancellable `PreLogin`
+  (direct pre-login reject) and `ProxyPingEvent.setResponse` (real ping cache),
+  and mirrors the verify-on-real-backend fix. Wired into CI + the `builds` branch.
+- **Prometheus metrics** on the Velocity, Paper & Bungee plugins (opt-in `metrics.enabled`
   + `metrics.bind`): `/metrics` (australis_* counters — attacks, blocks,
   verifications, edge pushes) and `/health`, for Grafana dashboards. Shared
   `MetricsServer`/`PrometheusExporter` in `common/` (JDK-only), with a live

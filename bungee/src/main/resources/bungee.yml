@@ -1,0 +1,5 @@
+name: Australis
+main: gg.australis.bungee.AustralisBungee
+version: 0.2.0
+author: Negativevibez
+description: Free self-hosted L7 DDoS/bot protection for Minecraft (BungeeCord/Waterfall).

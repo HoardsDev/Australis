@@ -67,7 +67,8 @@ docs/                 The plan
   DEPLOYMENT.md       Stand it up on free infra (Mode A / Mode B)
   ROADMAP.md          Build order, phase by phase
 common/               Shared protection logic (gg.australis.core) — one source of truth
-plugin/               Velocity plugin (Layer 2) — for networks behind a proxy
+plugin/               Velocity plugin (Layer 2) — for networks behind a Velocity proxy
+bungee/               BungeeCord/Waterfall plugin (Layer 2) — for Bungee-based networks
 paper/                Paper/Spigot plugin — runs directly on a backend server
 limbo/                Paper limbo verifier — proves real clients, signals the proxy
 edge/cmd/forwarder/   Edge TCP forwarder (Layer 0 self-mode) — built + tested
@@ -77,9 +78,10 @@ edge/xdp/             Kernel XDP/eBPF filter (Layer 1) — integration plan (not
 testkit/              floodtest — MC load/attack harness (run from your own box)
 ```
 
-**Which plugin?** Running a **Velocity** network → use `plugin/`. Running a
-single **Paper** server (like a Paper server) with no proxy → use `paper/` (drop the
-jar in `plugins/`). Both share the exact same tested protection logic.
+**Which plugin?** **Velocity** network → `plugin/`. **BungeeCord/Waterfall**
+network → `bungee/`. Single **Paper** server (like a Paper server) with no proxy →
+`paper/`. All three share the exact same tested protection logic
+(`common/gg.australis.core`).
 
 ## Status
 
