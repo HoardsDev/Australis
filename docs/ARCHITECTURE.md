@@ -199,10 +199,12 @@ thing didn't save me from a 300 Gbps flood" drama.
 
 | Component | Path | Language | Status |
 |---|---|---|---|
-| Velocity plugin (Layer 2) | `plugin/` | Java | scaffolded in this repo (Phase 1) |
-| XDP filter integration (Layer 1) | `edge/xdp/` | C/Rust or Go (vendored) | documented; integrate open-source filter |
-| Edge TCP forwarder (Layer 0 self-mode) | `edge/proxy/` | Go (planned) | documented |
-| Feedback bridge (plugin ↔ XDP map) | `plugin/.../edge/` | Java + local socket/CLI | designed (Phase 3) |
+| Velocity plugin (Layer 2) | `plugin/` | Java | built — rate limiting, verification, command, reload, edge client |
+| Edge TCP forwarder (Layer 0 self-mode) | `edge/cmd/forwarder/` | Go | built + tested (PROXY v2 header validated) |
+| Feedback agent (plugin → kernel) | `edge/cmd/agent/` | Go | built + tested (live nftables set) |
+| Feedback client (plugin side) | `plugin/.../edge/` | Java | built (HTTP push, de-duplicated) |
+| nftables + systemd + installer | `edge/nftables`, `edge/systemd`, `edge/install-edge.sh` | nft/bash | built (ruleset validates) |
+| XDP filter integration (Layer 1) | `edge/xdp/` | C/Rust/Go (vendored) | documented; integrate open-source filter |
 
 See `ROADMAP.md` for the build order and `DEPLOYMENT.md` for how an operator
 actually stands it up on free infrastructure.

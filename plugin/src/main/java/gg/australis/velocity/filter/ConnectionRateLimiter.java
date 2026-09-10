@@ -43,7 +43,7 @@ public final class ConnectionRateLimiter {
         static Decision block(String reason) { return new Decision(true, reason); }
     }
 
-    private final AustralisConfig config;
+    private volatile AustralisConfig config;
     private final Logger logger;
 
     private final Map<String, Window> connections = new ConcurrentHashMap<>();
@@ -54,6 +54,11 @@ public final class ConnectionRateLimiter {
     public ConnectionRateLimiter(AustralisConfig config, Logger logger) {
         this.config = config;
         this.logger = logger;
+    }
+
+    /** Swap in a new config snapshot on reload. */
+    public void reconfigure(AustralisConfig config) {
+        this.config = config;
     }
 
     public Decision checkConnection(String ip) {

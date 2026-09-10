@@ -1,49 +1,60 @@
 # Australis — Build Roadmap
 
 Ordered by value-per-effort. Each phase is independently useful — ship as you go.
+`[x]` = done in this repo, `[~]` = partial / API-limited (see note), `[ ]` = todo.
 
-## Phase 1 — L7 plugin core (biggest bang, start here)
+## Phase 1 — L7 plugin core ✅
 **Deliverable:** a Velocity plugin that already stops most attacks.
-- [x] Project scaffold (Gradle, plugin main, config) — in this repo
-- [ ] Netty early-rejection handler (kill bad connections before player object)
-- [ ] Per-IP connection rate limiter (sliding window) — *starter included*
-- [ ] Per-IP login rate limiter + connect/disconnect churn detection
-- [ ] Handshake / protocol-state validation (reject out-of-order, bad next-state)
-- [ ] Status/ping response cache + per-IP ping rate limit
-- [ ] Config schema + hot reload
-- [ ] Metrics (counters for dropped/verified) + `/australis stats` command
-> Study `Sonar` (open-source) before/while building — it solves this exact space.
+- [x] Project scaffold (Gradle wrapper, plugin main, config)
+- [x] Per-IP connection rate limiter (sliding window + temp-ban + self-pruning)
+- [x] Per-IP login rate limiter + connect/disconnect churn detection
+- [x] Global attack detector (gates aggressive defences to real attacks)
+- [x] Status/ping response cache + per-IP ping rate limit
+- [x] Config schema + live hot reload (`/australis reload`)
+- [x] Metrics counters + `/australis stats` command
+- [~] Netty early-rejection *below* the public API — the public event pipeline
+      (PreLogin) already rejects pre-auth; true Netty-pipeline rejection is the
+      deep path shared with Phase 2 below.
 
-## Phase 2 — Bot verification (limbo challenge)
+## Phase 2 — Bot verification ✅ (API-level) / [ ] (deep)
 **Deliverable:** near-total bot-join immunity.
-- [ ] Hold new joiners in a limbo/verification state (don't forward to backend yet)
-- [ ] Physics/movement challenge (gravity, position packets bots skip)
-- [ ] Keep-alive + transaction/response challenge
-- [ ] Configurable verification difficulty + allowlist for known-good IPs
-- [ ] Pass → forward to backend; fail → drop + feed to blocklist
+- [x] Reconnect challenge (attack-gated) — dumb flood bots never reconnect
+- [x] Verified-IP allowlist with TTL; auto-verify on successful session
+- [x] Operator allowlist + manual `/australis verify|unverify`
+- [x] Pass → forward; fail → (via limiters) drop + feed to edge blocklist
+- [ ] **Deep:** packet-level limbo (movement/gravity/keep-alive) via Netty or a
+      NanoLimbo backend, for bots that *do* reconnect (see note in
+      `VerificationManager.java`; study Sonar).
 
-## Phase 3 — Edge + XDP integration (adds L3/L4 + IP hiding, self-mode)
+## Phase 3 — Edge + XDP + feedback loop ✅
 **Deliverable:** line-rate kernel filtering + origin hiding on a free VM.
-- [ ] Vendor/build the open-source Minecraft XDP filter (Java + Bedrock)
-- [ ] systemd units + one-command `install-edge.sh` for Oracle free tier
-- [ ] Thin TCP forwarder with PROXY protocol v2 (edge → origin)
-- [ ] **Feedback bridge:** plugin writes malicious IPs into the XDP blocklist map
-      (local API/socket on the edge, shared-token auth)
-- [ ] Origin-lockdown helper script
+- [x] TCP forwarder with PROXY protocol v2 (Go) — header validated
+- [x] Feedback agent: plugin → kernel nftables blocklist (Go) — tested live
+- [x] Feedback client in the plugin (HTTP push, de-duplicated)
+- [x] nftables ruleset (blocklist sets + SYN rate fallback) — validates
+- [x] systemd units + one-command `install-edge.sh` (Oracle free tier)
+- [x] Origin-lockdown instructions (docs/DEPLOYMENT.md)
+- [ ] Vendor/build the open-source Minecraft XDP filter + wire agent to its map
+      (nftables set is the working interim; XDP map is the perf upgrade)
 
-## Phase 4 — Packaging & distribution
-- [ ] Publish plugin to Modrinth + Hangar + GitHub Releases
-- [ ] Docs site on Cloudflare Pages (free) — here Cloudflare is the right tool
-- [ ] Quick-start for Mode A (5 min) and Mode B (20 min)
-- [ ] Honest capability matrix front-and-center (copy from ARCHITECTURE §6)
+## Phase 4 — Packaging & distribution ✅
+- [x] Gradle wrapper committed; `go` module builds
+- [x] GitHub Actions CI (build plugin + edge, artifacts, release on tag)
+- [x] LICENSE (MIT), CONTRIBUTING, SECURITY
+- [x] Quick-start for Mode A + Mode B (docs/QUICKSTART.md)
+- [x] Honest capability matrix front-and-centre (README + ARCHITECTURE §6)
+- [ ] Publish to Modrinth + Hangar (needs your accounts/tokens)
+- [ ] Docs site on Cloudflare Pages (free)
 
-## Phase 5 — Optional hosted edge (the only thing that ever costs money)
-- [ ] Managed anycast/edge you host (bandwidth = real cost)
-- [ ] Keep it opt-in / donation- or sponsor-funded so the core stays free forever
-- [ ] Integrate signup with the existing the storefront if desired
+## Phase 5 — Optional hosted edge (design)
+See `docs/HOSTED-EDGE.md`.
+- [x] Design for a managed anycast/edge (the only thing that costs money)
+- [ ] Build it (only if there's demand; keep the core free forever)
+- [ ] Optional signup integration with the the storefront
 
 ## Cross-cutting
-- [ ] BungeeCord/Waterfall port of the plugin (after Velocity is solid)
-- [ ] Paper-direct mode (for servers without a proxy)
-- [ ] IPv6 support in the XDP path (current open-source filters are IPv4-only)
-- [ ] Test harness: self-attack lab (your infra only) for regression testing
+- [ ] BungeeCord/Waterfall port of the plugin
+- [ ] Paper-direct mode (servers without a proxy)
+- [ ] Bedrock/RakNet edge (Upioti XDP filter)
+- [ ] IPv6 in the XDP path (current open-source filters are IPv4-only)
+- [ ] Self-attack test lab (your infra only) for regression testing

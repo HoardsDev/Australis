@@ -1,0 +1,20 @@
+[Unit]
+Description=Australis XDP/eBPF Minecraft filter (line-rate L3/L4 + protocol)
+After=network-online.target
+Wants=network-online.target
+Before=australis-forwarder.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/australis/xdp.env
+# IFACE and PORT come from the env file. This wraps the vendored open-source
+# Minecraft XDP loader (see edge/xdp/README.md); adjust the flags to match the
+# loader you install.
+ExecStart=/opt/australis/xdp-loader --iface ${IFACE} --port ${PORT} --syn-rate 10 --syn-window 3
+Restart=always
+RestartSec=2
+AmbientCapabilities=CAP_NET_ADMIN CAP_BPF CAP_SYS_ADMIN
+User=root
+
+[Install]
+WantedBy=multi-user.target

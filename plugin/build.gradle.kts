@@ -5,10 +5,13 @@ plugins {
 }
 
 group = "gg.australis"
-version = "0.1.0-SNAPSHOT"
+version = "0.2.0"
 
-java {
-    toolchain.languageVersion.set(JavaLanguageVersion.of(17))
+// Target Java 17 bytecode (Velocity's minimum) while compiling with whatever
+// JDK 17+ is available. Using `release` avoids needing a specific toolchain JDK.
+tasks.withType<JavaCompile> {
+    options.release.set(17)
+    options.encoding = "UTF-8"
 }
 
 repositories {

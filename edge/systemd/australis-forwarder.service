@@ -1,0 +1,19 @@
+[Unit]
+Description=Australis edge TCP forwarder (hides origin, adds PROXY protocol)
+After=network-online.target australis-nftables.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/australis/forwarder.env
+# LISTEN, ORIGIN set in the env file.
+ExecStart=/opt/australis/forwarder -listen ${LISTEN} -origin ${ORIGIN} -proxy-protocol
+Restart=always
+RestartSec=2
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target

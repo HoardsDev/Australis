@@ -1,30 +1,55 @@
-# Australis configuration (Phase 1: L7 connection + ping rate limiting)
-# Times are in milliseconds. Tune to your server's real traffic.
+# Australis configuration
+# Free, self-hosted L7 DDoS/bot protection for Minecraft (Velocity).
+# Times are in milliseconds unless noted. Tune to your server's real traffic.
+# Reload live with:  /australis reload
 
-# New connections (login attempts) per IP.
+# --- Per-IP new-connection flood limiter ---
 connections:
   max-per-window: 8      # allowed new connections...
   window-millis: 3000    # ...per this window per IP
   block-millis: 30000    # temp-ban duration once tripped
 
-# Status/MOTD pings per IP (server-list refreshes).
+# --- Per-IP status/MOTD ping limiter + response cache ---
 pings:
   max-per-window: 20
   window-millis: 3000
   block-millis: 10000
+  cache-millis: 1000     # serve one cached ping to everyone for this long (0 = off)
 
-# Memory housekeeping for the in-JVM rate-limit tables.
+# --- Per-IP login/auth abuse + connect/disconnect churn ---
+login:
+  max-per-window: 6
+  window-millis: 5000
+  max-churn: 4           # rapid connect/disconnect cycles allowed before blocking
+
+# --- Global attack detector (flips on aggressive defences only during an attack) ---
+attack-detector:
+  connections-per-second: 60   # aggregate new-conns/sec that counts as "under attack"
+  cooldown-millis: 30000       # stay in attack mode this long after the last spike
+
+# --- Bot verification (reconnect challenge) ---
+verification:
+  enabled: true
+  only-during-attack: true     # true = real players never challenged in normal operation
+  reconnect-window-millis: 15000  # a challenged client must reconnect within this window
+  verified-ttl-millis: 3600000    # trust an IP for 1h after a successful session
+  pending-ttl-millis: 60000
+  kick-message: "§bAustralis §7» §fVerifying connection… please reconnect."
+  allowlist: []                # IPs that are always trusted, e.g. ["203.0.113.5"]
+
+# --- Edge feedback loop (Phase 3): push confirmed abusers to the kernel ---
+# Point this at the Australis edge agent (see docs/DEPLOYMENT.md Mode B).
+# When enabled, blocked IPs are dropped at the NIC (nftables set / XDP map).
+edge:
+  enabled: false
+  url: "http://10.8.0.2:8787"   # edge agent address (over your private link)
+  token: "change-me"            # must match the agent's --token
+  ban-seconds: 600              # how long the edge should drop the IP
+
+# --- Memory housekeeping ---
 housekeeping:
   prune-interval-millis: 60000
   entry-ttl-millis: 300000
 
 log-blocks: true
-kick-message: "Australis: you are connecting too quickly. Try again shortly."
-
-# --- Phase 3 (not yet active): edge feedback bridge ---
-# When you run the XDP edge (see docs/DEPLOYMENT.md Mode B), Australis can push
-# malicious IPs into the edge's kernel blocklist so they're dropped at the NIC.
-# edge:
-#   enabled: false
-#   address: "10.0.0.2:8787"
-#   token: "change-me"
+kick-message: "§bAustralis §7» §fYou are connecting too quickly. Try again shortly."

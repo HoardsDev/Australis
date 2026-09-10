@@ -62,17 +62,33 @@ edge/proxy/           Edge TCP forwarder (Layer 0 self-mode) — integration pla
 
 ## Status
 
-Phase 1 scaffold: connection + ping rate limiting, config, plugin lifecycle.
-Next: Netty early-rejection, bot verification (Phase 2), XDP edge + feedback
-loop (Phase 3). See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Working, and validated where the sandbox allowed:
+- **Layer 2 plugin (Java):** attack detector, per-IP connection/ping/login rate
+  limiting, connect/disconnect churn detection, status-ping cache, bot
+  verification (reconnect challenge, attack-gated), verified-IP allowlist,
+  `/australis` admin command, live config reload, and the edge feedback client.
+- **Layer 1/0 edge (Go):** TCP forwarder with PROXY protocol v2 (validated —
+  emits a byte-correct header), and a feedback agent that drops convicted IPs
+  into a live nftables set (validated end-to-end), plus systemd units, nftables
+  ruleset, and a one-command `install-edge.sh`.
+- **Layer 1 XDP:** integration plan around the open-source Minecraft XDP filters
+  (see `edge/xdp/`).
 
-## Build the plugin
+Next: deep packet-level (Sonar-style) verification, Bedrock/BungeeCord support,
+IPv6 XDP. See [`docs/ROADMAP.md`](docs/ROADMAP.md). Quick start:
+[`docs/QUICKSTART.md`](docs/QUICKSTART.md).
+
+## Build
 
 ```bash
-cd plugin
-./gradlew build      # produces build/libs/australis-velocity-0.1.0-SNAPSHOT.jar
+# Plugin (needs JDK 17+)
+cd plugin && ./gradlew shadowJar   # -> build/libs/australis-velocity-0.2.0.jar
+
+# Edge (needs Go 1.24+)
+cd edge && go build ./cmd/...
 ```
-(Needs JDK 17+. Drop the jar in your Velocity `plugins/` folder.)
+Drop the plugin jar in your Velocity `plugins/` folder. CI builds both on every
+push (`.github/workflows/build.yml`) and attaches them to tagged releases.
 
 ## Prior art worth studying (don't reinvent)
 - **Sonar** — open-source Velocity/Bungee/Paper antibot (L7 verification).
@@ -84,5 +100,5 @@ Only ever test protection against infrastructure **you own**. Attacking servers
 you don't control is a crime everywhere. This project is for **defense**.
 
 ## License
-TBD (MIT recommended for adoption). Check licenses of any vendored XDP filters
-before redistributing.
+[MIT](LICENSE). Check the licenses of any vendored XDP filters before
+redistributing them alongside Australis.

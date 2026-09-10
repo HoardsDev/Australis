@@ -1,0 +1,21 @@
+[Unit]
+Description=Australis edge feedback agent (plugin -> nftables blocklist)
+After=network-online.target australis-nftables.service
+Wants=network-online.target
+Requires=australis-nftables.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/australis/agent.env
+# LISTEN and TOKEN come from the env file. TOKEN must match the plugin config.
+ExecStart=/opt/australis/agent -listen ${LISTEN} -token ${TOKEN}
+Restart=always
+RestartSec=2
+# Needs CAP_NET_ADMIN to run `nft add element`.
+AmbientCapabilities=CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_ADMIN
+NoNewPrivileges=yes
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target

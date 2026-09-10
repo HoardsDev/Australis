@@ -3,7 +3,8 @@
 build/
 *.class
 *.jar
-!gradle/wrapper/gradle-wrapper.jar
+# Keep the Gradle wrapper jar wherever it lives (it's under plugin/).
+!**/gradle/wrapper/gradle-wrapper.jar
 
 # IDE
 .idea/
