@@ -1,0 +1,30 @@
+# Australis configuration (Phase 1: L7 connection + ping rate limiting)
+# Times are in milliseconds. Tune to your server's real traffic.
+
+# New connections (login attempts) per IP.
+connections:
+  max-per-window: 8      # allowed new connections...
+  window-millis: 3000    # ...per this window per IP
+  block-millis: 30000    # temp-ban duration once tripped
+
+# Status/MOTD pings per IP (server-list refreshes).
+pings:
+  max-per-window: 20
+  window-millis: 3000
+  block-millis: 10000
+
+# Memory housekeeping for the in-JVM rate-limit tables.
+housekeeping:
+  prune-interval-millis: 60000
+  entry-ttl-millis: 300000
+
+log-blocks: true
+kick-message: "Australis: you are connecting too quickly. Try again shortly."
+
+# --- Phase 3 (not yet active): edge feedback bridge ---
+# When you run the XDP edge (see docs/DEPLOYMENT.md Mode B), Australis can push
+# malicious IPs into the edge's kernel blocklist so they're dropped at the NIC.
+# edge:
+#   enabled: false
+#   address: "10.0.0.2:8787"
+#   token: "change-me"

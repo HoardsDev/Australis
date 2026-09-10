@@ -1,0 +1,18 @@
+# Java / Gradle
+.gradle/
+build/
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+
+# eBPF build artifacts
+*.o
+*.ll
