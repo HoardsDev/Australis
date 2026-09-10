@@ -1,24 +1,22 @@
 [Unit]
-Description=Australis XDP/eBPF Minecraft filter (line-rate L3/L4 + protocol) — OPTIONAL, not active by default
+Description=Australis XDP/eBPF filter (line-rate L3/L4 SYN drop + convicted-IP blocklist at the NIC)
 After=network-online.target
 Wants=network-online.target
 Before=australis-forwarder.service
-# There is NO bundled XDP loader yet (edge/xdp/ is a README only). This unit is
-# installed but inert: ConditionPathExists means systemd skips it until you have
-# actually installed a loader at /opt/australis/xdp-loader. See edge/xdp/README.md.
-# Do not assume XDP filtering is running just because this unit is enabled.
+# Activates only once the loader binary is installed (install-edge.sh builds it to
+# this path). Enable with XDP=1 ./install-edge.sh — XDP needs a supported NIC/kernel,
+# so it is opt-in; the nftables path is the default everywhere.
 ConditionPathExists=/opt/australis/xdp-loader
 
 [Service]
 Type=simple
 EnvironmentFile=/etc/australis/xdp.env
-# IFACE and PORT come from the env file. This wraps a vendored open-source
-# Minecraft XDP loader (see edge/xdp/README.md); adjust the flags to match the
-# loader you install.
-ExecStart=/opt/australis/xdp-loader --iface ${IFACE} --port ${PORT} --syn-rate 10 --syn-window 3
+# Attaches the filter and pins the blocklist map at /sys/fs/bpf/australis_blocklist
+# (the australis-agent writes convicted IPs there). Detaches on stop.
+ExecStart=/opt/australis/xdp-loader -iface ${IFACE} -port ${PORT} -syn-per-window ${SYN_PER_WINDOW} -window ${SYN_WINDOW} -stats-interval 60s
 Restart=always
 RestartSec=2
-AmbientCapabilities=CAP_NET_ADMIN CAP_BPF CAP_SYS_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN CAP_BPF CAP_SYS_ADMIN CAP_PERFMON
 User=root
 
 [Install]

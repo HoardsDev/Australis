@@ -42,6 +42,8 @@ type server struct {
 	set4      string
 	set6      string
 	maxBanSec int
+	useNft    bool     // enforce via nftables (also the fallback when no XDP map)
+	xdp       *xdpSink // enforce at the NIC via the XDP blocklist map (optional)
 	// nft runs an nftables command; injectable so tests don't need real nft.
 	nft func(args ...string) error
 }
@@ -56,13 +58,28 @@ func main() {
 	set4 := flag.String("set4", "blocklist", "nftables ipv4 set name")
 	set6 := flag.String("set6", "blocklist6", "nftables ipv6 set name")
 	maxBan := flag.Int("max-ban-seconds", 86400, "clamp requested ban duration to this maximum")
+	xdpMap := flag.String("xdp-map", "", "path to the pinned XDP blocklist map for NIC-level drop (e.g. /sys/fs/bpf/australis_blocklist)")
+	useNft := flag.Bool("nft", true, "enforce via the nftables set (set -nft=false on an XDP-only edge)")
 	flag.Parse()
 
 	if *token == "" {
 		log.Fatal("australis-agent: -token is required")
 	}
 
-	s := &server{token: *token, table: *table, set4: *set4, set6: *set6, maxBanSec: *maxBan, nft: realNft}
+	var xsink *xdpSink
+	if *xdpMap != "" {
+		x, err := openXDPBlocklist(*xdpMap)
+		if err != nil {
+			log.Fatalf("australis-agent: %v", err)
+		}
+		xsink = x
+		log.Printf("australis-agent: XDP enforcement via %s", *xdpMap)
+	}
+	if !*useNft && xsink == nil {
+		log.Fatal("australis-agent: no enforcement backend — enable -nft or set -xdp-map")
+	}
+
+	s := &server{token: *token, table: *table, set4: *set4, set6: *set6, maxBanSec: *maxBan, useNft: *useNft, xdp: xsink, nft: realNft}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -110,13 +127,28 @@ func (s *server) handleBlock(w http.ResponseWriter, r *http.Request) {
 		ban = s.maxBanSec
 	}
 
-	set := s.set4
-	if ip.To4() == nil {
-		set = s.set6
+	enforced := false
+	if s.xdp != nil {
+		if err := s.xdp.block(ip, ban); err != nil {
+			log.Printf("australis-agent: xdp add failed for %s: %v", ip, err)
+		} else {
+			enforced = true
+		}
 	}
-
-	if err := s.addToSet(set, ip.String(), ban); err != nil {
-		log.Printf("australis-agent: nft add failed for %s: %v", ip, err)
+	// Use nftables when explicitly enabled, or as the fallback when no XDP map is
+	// configured (also the path the unit tests exercise).
+	if s.useNft || s.xdp == nil {
+		set := s.set4
+		if ip.To4() == nil {
+			set = s.set6
+		}
+		if err := s.addToSet(set, ip.String(), ban); err != nil {
+			log.Printf("australis-agent: nft add failed for %s: %v", ip, err)
+		} else {
+			enforced = true
+		}
+	}
+	if !enforced {
 		http.Error(w, "enforcement failed", http.StatusInternalServerError)
 		return
 	}

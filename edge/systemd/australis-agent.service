@@ -1,16 +1,17 @@
 [Unit]
 Description=Australis edge feedback agent (plugin -> nftables blocklist)
-After=network-online.target australis-nftables.service
+After=network-online.target australis-nftables.service australis-xdp.service
 Wants=network-online.target
 Requires=australis-nftables.service
 
 [Service]
 Type=simple
 EnvironmentFile=/etc/australis/agent.env
-# LISTEN and TOKEN come from the env file. The agent reads TOKEN from the
-# environment (never passed on argv, so it can't be read from /proc/<pid>/cmdline
-# or `ps`). TOKEN must match the plugin config.
-ExecStart=/opt/australis/agent -listen ${LISTEN}
+# LISTEN, TOKEN and XDP_MAP come from the env file. TOKEN is read from the
+# environment (never on argv, so it can't be read via /proc/<pid>/cmdline or
+# `ps`). XDP_MAP is empty by default (nftables enforcement); with XDP enabled it
+# is the pinned map path, so convicted IPs are dropped at the NIC too.
+ExecStart=/opt/australis/agent -listen ${LISTEN} -xdp-map ${XDP_MAP}
 Restart=always
 RestartSec=2
 # Needs CAP_NET_ADMIN to run `nft add element`.

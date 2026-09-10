@@ -14,9 +14,12 @@ build/
 # OS
 .DS_Store
 
-# eBPF build artifacts
+# eBPF build artifacts — but KEEP the committed bpf2go objects: they are embedded
+# into the Go loader via go:embed, so CI builds the XDP loader without clang.
 *.o
 *.ll
+!edge/xdp/australis_bpfel.o
+!edge/xdp/australis_bpfeb.o
 
 # built floodtest binaries (artifacts)
 testkit/floodtest

@@ -35,6 +35,9 @@ MAX_CONNS="${MAX_CONNS:-8192}"
 MAX_CONNS_PER_IP="${MAX_CONNS_PER_IP:-64}"
 IDLE_TIMEOUT="${IDLE_TIMEOUT:-5m}"
 METRICS="${METRICS:-}"
+XDP="${XDP:-0}"                        # 1 = enable the XDP line-rate filter (needs a supported NIC/kernel)
+SYN_PER_WINDOW="${SYN_PER_WINDOW:-40}" # XDP per-source SYN limit
+SYN_WINDOW="${SYN_WINDOW:-3s}"         # XDP SYN window
 
 # Idempotent token handling: reuse the token from a previous install unless the
 # caller explicitly overrode TOKEN, otherwise generate a fresh one.
@@ -64,14 +67,28 @@ else
     log "unknown package manager — ensure 'nftables' and 'go' are installed."
 fi
 
+# The edge needs a modern Go (the XDP loader uses cilium/ebpf). Distro packages
+# can be too old; fall back to the snap. Needs network (deps aren't vendored) —
+# the box already fetched apt packages above.
+GO=go
+if ! command -v "$GO" >/dev/null 2>&1 || ! "$GO" version 2>/dev/null | grep -qE 'go1\.(2[4-9]|[3-9][0-9])'; then
+    if command -v snap >/dev/null 2>&1; then
+        log "distro Go missing/too old — installing current Go via snap..."
+        snap install go --classic >/dev/null 2>&1 || true
+        [ -x /snap/bin/go ] && GO=/snap/bin/go
+    fi
+fi
+
 log "building edge binaries..."
 mkdir -p /opt/australis /etc/australis
-if command -v go >/dev/null 2>&1; then
-    ( cd "$SCRIPT_DIR" && GOFLAGS=-mod=mod GOPROXY=off \
-        go build -o /opt/australis/forwarder ./cmd/forwarder \
-        && GOFLAGS=-mod=mod GOPROXY=off go build -o /opt/australis/agent ./cmd/agent )
+if "$GO" version >/dev/null 2>&1; then
+    ( cd "$SCRIPT_DIR" && export GOFLAGS=-mod=mod \
+        && "$GO" build -o /opt/australis/forwarder ./cmd/forwarder \
+        && "$GO" build -o /opt/australis/agent ./cmd/agent \
+        && "$GO" build -o /opt/australis/xdp-loader ./cmd/xdp-loader )
 elif [ -f "$SCRIPT_DIR/bin/forwarder" ] && [ -f "$SCRIPT_DIR/bin/agent" ]; then
     cp "$SCRIPT_DIR/bin/forwarder" "$SCRIPT_DIR/bin/agent" /opt/australis/
+    [ -f "$SCRIPT_DIR/bin/xdp-loader" ] && cp "$SCRIPT_DIR/bin/xdp-loader" /opt/australis/
 else
     die "go not found and no prebuilt binaries in ./bin"
 fi
@@ -88,15 +105,19 @@ MAX_CONNS_PER_IP=$MAX_CONNS_PER_IP
 IDLE_TIMEOUT=$IDLE_TIMEOUT
 METRICS=$METRICS
 EOF
+# With XDP enabled the agent also drops convicted IPs at the NIC via the pinned map.
+XDP_MAP=""
+[ "$XDP" = "1" ] && XDP_MAP="/sys/fs/bpf/australis_blocklist"
 cat > /etc/australis/agent.env <<EOF
 LISTEN=$AGENT_LISTEN
 TOKEN=$TOKEN
+XDP_MAP=$XDP_MAP
 EOF
-# xdp.env is written for convenience if you later install an XDP loader; the
-# australis-xdp.service is inert until /opt/australis/xdp-loader exists.
 cat > /etc/australis/xdp.env <<EOF
 IFACE=$IFACE
 PORT=$PORT
+SYN_PER_WINDOW=$SYN_PER_WINDOW
+SYN_WINDOW=$SYN_WINDOW
 EOF
 # Lock down the config dir + secret-bearing env files. forwarder.env holds the
 # hidden ORIGIN address (the whole point of the product is to keep it secret) and
@@ -105,15 +126,18 @@ chmod 700 /etc/australis
 chmod 600 /etc/australis/agent.env /etc/australis/forwarder.env /etc/australis/xdp.env
 
 log "installing systemd units..."
-# The xdp unit is installed so the file exists and is internally consistent, but
-# it is NOT enabled or started: it has ConditionPathExists=/opt/australis/xdp-loader
-# and there is no bundled loader yet, so it stays inert. See edge/xdp/README.md.
 cp "$SCRIPT_DIR"/systemd/australis-nftables.service \
    "$SCRIPT_DIR"/systemd/australis-forwarder.service \
    "$SCRIPT_DIR"/systemd/australis-agent.service \
    "$SCRIPT_DIR"/systemd/australis-xdp.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now australis-nftables.service
+# XDP is opt-in (XDP=1) because it needs a supported NIC/kernel. Start it BEFORE
+# the agent so the pinned blocklist map exists when the agent opens it.
+if [ "$XDP" = "1" ]; then
+    log "enabling XDP filter (line-rate L3/L4 drop)..."
+    systemctl enable --now australis-xdp.service || log "XDP failed to start — check 'journalctl -u australis-xdp'"
+fi
 systemctl enable --now australis-agent.service
 systemctl enable --now australis-forwarder.service
 
@@ -151,8 +175,13 @@ if [ -n "$METRICS" ]; then
     echo "  Forwarder metrics: http://${METRICS}/metrics"
 fi
 echo
-echo "  NOT active: XDP/eBPF line-rate filter. There is no bundled loader yet —"
-echo "  edge/xdp/ is a design note. The australis-xdp.service unit is installed but"
-echo "  inert (it only starts once /opt/australis/xdp-loader exists). To add it later,"
-echo "  follow edge/xdp/README.md to build/install a loader, then:"
-echo "       systemctl enable --now australis-xdp.service"
+if [ "$XDP" = "1" ]; then
+    echo "  XDP filter: ACTIVE on ${IFACE} — line-rate SYN drop (${SYN_PER_WINDOW}/${SYN_WINDOW}/IP)"
+    echo "  + convicted-IP drop at the NIC (agent writes /sys/fs/bpf/australis_blocklist)."
+    echo "  Check: sudo bpftool prog show | grep australis  ·  journalctl -u australis-xdp"
+else
+    echo "  XDP filter: built at /opt/australis/xdp-loader but NOT enabled."
+    echo "  It drops SYN floods + convicted IPs at the NIC (line-rate). Enable it with a"
+    echo "  supported NIC/kernel by re-running:  XDP=1 sudo ./install-edge.sh  (or:"
+    echo "  systemctl enable --now australis-xdp.service, then add XDP_MAP to agent.env)."
+fi
