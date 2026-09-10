@@ -17,11 +17,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-      - name: Build shaded jar
+      - name: Test + build shaded jar
         working-directory: plugin
         run: |
           chmod +x gradlew
-          ./gradlew shadowJar --no-daemon --console=plain
+          ./gradlew test shadowJar --no-daemon --console=plain
       - name: Upload jar
         uses: actions/upload-artifact@v4
         with:
@@ -36,10 +36,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.24"
-      - name: Vet + build
+      - name: Vet + test + build
         working-directory: edge
         run: |
           go vet ./...
+          go test ./...
           GOOS=linux GOARCH=amd64 go build -o dist/forwarder-amd64 ./cmd/forwarder
           GOOS=linux GOARCH=arm64 go build -o dist/forwarder-arm64 ./cmd/forwarder
           GOOS=linux GOARCH=amd64 go build -o dist/agent-amd64 ./cmd/agent

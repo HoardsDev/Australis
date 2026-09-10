@@ -22,9 +22,10 @@ Ordered by value-per-effort. Each phase is independently useful — ship as you 
 - [x] Verified-IP allowlist with TTL; auto-verify on successful session
 - [x] Operator allowlist + manual `/australis verify|unverify`
 - [x] Pass → forward; fail → (via limiters) drop + feed to edge blocklist
-- [ ] **Deep:** packet-level limbo (movement/gravity/keep-alive) via Netty or a
-      NanoLimbo backend, for bots that *do* reconnect (see note in
-      `VerificationManager.java`; study Sonar).
+- [~] **Deep:** limbo *routing* is built (`LimboRouter` + `australis:verify`
+      plugin channel + PlayerChooseInitialServerEvent) and unit-tested; it needs
+      a limbo backend (NanoLimbo/Sonar) to run the actual movement/keep-alive
+      checks. Native Netty-level checks in-proxy remain a future option.
 
 ## Phase 3 — Edge + XDP + feedback loop ✅
 **Deliverable:** line-rate kernel filtering + origin hiding on a free VM.

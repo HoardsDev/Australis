@@ -36,6 +36,16 @@ verification:
   pending-ttl-millis: 60000
   kick-message: "§bAustralis §7» §fVerifying connection… please reconnect."
   allowlist: []                # IPs that are always trusted, e.g. ["203.0.113.5"]
+  # Deep verification: route unverified players to a limbo backend first (e.g.
+  # NanoLimbo, or a Paper server running Sonar). The limbo server does the
+  # movement/keep-alive checks and sends a message on the "australis:verify"
+  # plugin channel when a player passes; Australis then moves them to a real
+  # server. Requires a limbo backend registered in velocity.toml.
+  limbo:
+    enabled: false
+    only-during-attack: true
+    server: "limbo"            # name of the limbo server in velocity.toml
+    fallback-server: ""        # where to send verified players (blank = first non-limbo server)
 
 # --- Edge feedback loop (Phase 3): push confirmed abusers to the kernel ---
 # Point this at the Australis edge agent (see docs/DEPLOYMENT.md Mode B).

@@ -5,14 +5,20 @@ import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.command.CommandMeta;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
+import com.velocitypowered.api.event.connection.PluginMessageEvent;
 import com.velocitypowered.api.event.connection.PostLoginEvent;
 import com.velocitypowered.api.event.connection.PreLoginEvent;
+import com.velocitypowered.api.event.player.PlayerChooseInitialServerEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyPingEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
+import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
+import com.velocitypowered.api.proxy.ServerConnection;
+import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
+import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.server.ServerPing;
 import com.velocitypowered.api.scheduler.ScheduledTask;
 import gg.australis.velocity.command.AustralisCommand;
@@ -23,12 +29,14 @@ import gg.australis.velocity.filter.ConnectionRateLimiter;
 import gg.australis.velocity.filter.LoginThrottle;
 import gg.australis.velocity.filter.PingCache;
 import gg.australis.velocity.metrics.Stats;
+import gg.australis.velocity.verify.LimboRouter;
 import gg.australis.velocity.verify.VerificationManager;
 import org.slf4j.Logger;
 
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Optional;
 
 /**
  * Australis — free, self-hosted L7 protection for Minecraft (Velocity proxy).
@@ -48,6 +56,8 @@ import java.time.Duration;
 public final class AustralisPlugin {
 
     private static final String VERSION = "0.2.0";
+    private static final MinecraftChannelIdentifier VERIFY_CHANNEL =
+            MinecraftChannelIdentifier.from("australis:verify");
 
     private final ProxyServer proxy;
     private final Logger logger;
@@ -60,6 +70,7 @@ public final class AustralisPlugin {
     private ConnectionRateLimiter rateLimiter;
     private LoginThrottle loginThrottle;
     private VerificationManager verification;
+    private LimboRouter limboRouter;
     private PingCache pingCache;
     private EdgeClient edgeClient;
 
@@ -78,13 +89,17 @@ public final class AustralisPlugin {
 
         this.attackDetector = new AttackDetector(
                 config.attackPerSecondThreshold(), config.attackCooldownMillis());
-        this.rateLimiter = new ConnectionRateLimiter(config, logger);
+        this.rateLimiter = new ConnectionRateLimiter(
+                config.maxConnectionsPerWindow(), config.connectionWindowMillis(), config.connectionBlockMillis(),
+                config.maxPingsPerWindow(), config.pingWindowMillis(), config.pingBlockMillis());
         this.loginThrottle = new LoginThrottle(
                 config.maxLoginsPerWindow(), config.loginWindowMillis(), config.maxChurn());
         this.verification = new VerificationManager(
                 config.verifyEnabled(), config.verifyOnlyDuringAttack(),
                 config.verifyReconnectWindowMillis(), config.verifyVerifiedTtlMillis(),
                 config.verifyPendingTtlMillis(), config.verifyAllowlist());
+        this.limboRouter = new LimboRouter(
+                config.limboEnabled(), config.limboOnlyDuringAttack(), config.limboServer());
         this.pingCache = new PingCache(config.pingCacheMillis());
         this.edgeClient = new EdgeClient(logger, stats);
         this.edgeClient.reconfigure(config.edgeEnabled(), config.edgeUrl(),
@@ -93,6 +108,9 @@ public final class AustralisPlugin {
         CommandManager cm = proxy.getCommandManager();
         CommandMeta meta = cm.metaBuilder("australis").plugin(this).build();
         cm.register(meta, new AustralisCommand(this));
+
+        // Channel the limbo backend uses to signal that a player passed verification.
+        proxy.getChannelRegistrar().register(VERIFY_CHANNEL);
 
         pruneTask = proxy.getScheduler().buildTask(this, this::prune)
                 .repeat(Duration.ofMillis(config.pruneIntervalMillis()))
@@ -121,11 +139,14 @@ public final class AustralisPlugin {
         AustralisConfig fresh = AustralisConfig.loadOrCreate(dataDir, logger);
         this.config = fresh;
         attackDetector.reconfigure(fresh.attackPerSecondThreshold(), fresh.attackCooldownMillis());
-        rateLimiter.reconfigure(fresh);
+        rateLimiter.reconfigure(
+                fresh.maxConnectionsPerWindow(), fresh.connectionWindowMillis(), fresh.connectionBlockMillis(),
+                fresh.maxPingsPerWindow(), fresh.pingWindowMillis(), fresh.pingBlockMillis());
         loginThrottle.reconfigure(fresh.maxLoginsPerWindow(), fresh.loginWindowMillis(), fresh.maxChurn());
         verification.reconfigure(fresh.verifyEnabled(), fresh.verifyOnlyDuringAttack(),
                 fresh.verifyReconnectWindowMillis(), fresh.verifyVerifiedTtlMillis(),
                 fresh.verifyPendingTtlMillis(), fresh.verifyAllowlist());
+        limboRouter.reconfigure(fresh.limboEnabled(), fresh.limboOnlyDuringAttack(), fresh.limboServer());
         pingCache.reconfigure(fresh.pingCacheMillis());
         edgeClient.reconfigure(fresh.edgeEnabled(), fresh.edgeUrl(), fresh.edgeToken(), fresh.edgeBanSeconds());
         logger.info("Australis configuration reloaded.");
@@ -204,6 +225,70 @@ public final class AustralisPlugin {
         if (remote != null && remote.getAddress() != null) {
             loginThrottle.onEarlyDisconnect(remote.getAddress().getHostAddress());
         }
+    }
+
+    /**
+     * Deep verification: route not-yet-verified players to the limbo backend
+     * first (when configured/under attack). The limbo backend does the
+     * behavioural checks and signals a pass over the {@code australis:verify}
+     * channel (see {@link #onPluginMessage}).
+     */
+    @Subscribe
+    public void onChooseInitialServer(PlayerChooseInitialServerEvent event) {
+        if (!limboRouter.enabled()) {
+            return;
+        }
+        InetSocketAddress remote = event.getPlayer().getRemoteAddress();
+        if (remote == null || remote.getAddress() == null) {
+            return;
+        }
+        String ip = remote.getAddress().getHostAddress();
+        Optional<String> limbo = limboRouter.initialServer(
+                verification.isVerified(ip), attackDetector.isUnderAttack());
+        limbo.flatMap(proxy::getServer).ifPresent(event::setInitialServer);
+    }
+
+    /**
+     * The limbo backend sends a message on {@code australis:verify} once a player
+     * has passed its behavioural checks. We trust it only from a backend
+     * connection (never a client), mark the IP verified, and move the player to a
+     * real server.
+     */
+    @Subscribe
+    public void onPluginMessage(PluginMessageEvent event) {
+        if (!VERIFY_CHANNEL.equals(event.getIdentifier())) {
+            return;
+        }
+        // Consume: never forward a verify message on to the client.
+        event.setResult(PluginMessageEvent.ForwardResult.handled());
+        if (!(event.getSource() instanceof ServerConnection sc)) {
+            return; // ignore anything not from a backend server
+        }
+        Player player = sc.getPlayer();
+        InetSocketAddress remote = player.getRemoteAddress();
+        if (remote == null || remote.getAddress() == null) {
+            return;
+        }
+        verification.markVerified(remote.getAddress().getHostAddress());
+        stats.verificationsPassed.incrementAndGet();
+        RegisteredServer target = pickFallbackServer();
+        if (target != null) {
+            player.createConnectionRequest(target).fireAndForget();
+        }
+    }
+
+    private RegisteredServer pickFallbackServer() {
+        String configured = config.limboFallback();
+        if (configured != null && !configured.isBlank()) {
+            return proxy.getServer(configured).orElse(null);
+        }
+        String limbo = config.limboServer();
+        for (RegisteredServer s : proxy.getAllServers()) {
+            if (!s.getServerInfo().getName().equalsIgnoreCase(limbo)) {
+                return s;
+            }
+        }
+        return null;
     }
 
     @Subscribe

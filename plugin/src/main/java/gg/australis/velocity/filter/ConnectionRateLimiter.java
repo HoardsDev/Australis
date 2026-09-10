@@ -1,8 +1,5 @@
 package gg.australis.velocity.filter;
 
-import gg.australis.velocity.config.AustralisConfig;
-import org.slf4j.Logger;
-
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -19,14 +16,13 @@ import java.util.concurrent.atomic.AtomicLong;
  *       ping flood and a join flood have very different healthy rates.</li>
  *   <li>Temp-ban: once an IP trips the limit it stays blocked for a cool-down,
  *       so repeat offenders don't get a fresh allowance every window.</li>
- *   <li>Self-pruning: stale entries are dropped opportunistically to bound
- *       memory (an attacker using millions of spoofed IPs can't grow this
- *       unbounded — and spoofed L4 is the XDP layer's job anyway).</li>
+ *   <li>Pure JDK (no plugin/config/log deps) so it is trivially unit-testable
+ *       and reusable. Pruning is driven externally via {@link #prune(long)} on
+ *       the plugin's scheduler.</li>
  * </ul>
  *
- * <p>This is intentionally a plain in-JVM limiter. The kernel/XDP layer handles
- * true packet floods; this layer handles application-level connection abuse that
- * has already passed L4.
+ * <p>The kernel/XDP layer handles true packet floods; this layer handles
+ * application-level connection abuse that has already passed L4.
  */
 public final class ConnectionRateLimiter {
 
@@ -43,45 +39,43 @@ public final class ConnectionRateLimiter {
         static Decision block(String reason) { return new Decision(true, reason); }
     }
 
-    private volatile AustralisConfig config;
-    private final Logger logger;
-
     private final Map<String, Window> connections = new ConcurrentHashMap<>();
     private final Map<String, Window> pings = new ConcurrentHashMap<>();
 
-    private final AtomicLong lastPrune = new AtomicLong(System.currentTimeMillis());
+    private volatile int maxConnPerWindow;
+    private volatile long connWindowMillis;
+    private volatile long connBlockMillis;
+    private volatile int maxPingPerWindow;
+    private volatile long pingWindowMillis;
+    private volatile long pingBlockMillis;
 
-    public ConnectionRateLimiter(AustralisConfig config, Logger logger) {
-        this.config = config;
-        this.logger = logger;
+    public ConnectionRateLimiter(int maxConnPerWindow, long connWindowMillis, long connBlockMillis,
+                                 int maxPingPerWindow, long pingWindowMillis, long pingBlockMillis) {
+        reconfigure(maxConnPerWindow, connWindowMillis, connBlockMillis,
+                maxPingPerWindow, pingWindowMillis, pingBlockMillis);
     }
 
-    /** Swap in a new config snapshot on reload. */
-    public void reconfigure(AustralisConfig config) {
-        this.config = config;
+    public void reconfigure(int maxConnPerWindow, long connWindowMillis, long connBlockMillis,
+                            int maxPingPerWindow, long pingWindowMillis, long pingBlockMillis) {
+        this.maxConnPerWindow = maxConnPerWindow;
+        this.connWindowMillis = connWindowMillis;
+        this.connBlockMillis = connBlockMillis;
+        this.maxPingPerWindow = maxPingPerWindow;
+        this.pingWindowMillis = pingWindowMillis;
+        this.pingBlockMillis = pingBlockMillis;
     }
 
     public Decision checkConnection(String ip) {
-        return check(connections, ip,
-                config.maxConnectionsPerWindow(),
-                config.connectionWindowMillis(),
-                config.connectionBlockMillis(),
-                "connection-flood");
+        return check(connections, ip, maxConnPerWindow, connWindowMillis, connBlockMillis, "connection-flood");
     }
 
     public Decision checkPing(String ip) {
-        return check(pings, ip,
-                config.maxPingsPerWindow(),
-                config.pingWindowMillis(),
-                config.pingBlockMillis(),
-                "ping-flood");
+        return check(pings, ip, maxPingPerWindow, pingWindowMillis, pingBlockMillis, "ping-flood");
     }
 
     private Decision check(Map<String, Window> table, String ip,
-                           int maxPerWindow, long windowMillis, long blockMillis,
-                           String reason) {
+                           int maxPerWindow, long windowMillis, long blockMillis, String reason) {
         long now = System.currentTimeMillis();
-        maybePrune(now);
 
         Window w = table.computeIfAbsent(ip, k -> {
             Window nw = new Window();
@@ -91,15 +85,13 @@ public final class ConnectionRateLimiter {
         w.lastSeen = now;
 
         // Still inside a temp-ban?
-        long until = w.blockedUntil.get();
-        if (until > now) {
+        if (w.blockedUntil.get() > now) {
             return Decision.block(reason + "/banned");
         }
 
         // Roll the window if it has expired.
         long start = w.windowStart.get();
         if (now - start >= windowMillis) {
-            // Reset window; small race here is harmless (worst case one extra allow).
             if (w.windowStart.compareAndSet(start, now)) {
                 w.count.set(0);
             }
@@ -113,31 +105,17 @@ public final class ConnectionRateLimiter {
         return Decision.ALLOW;
     }
 
-    /** Opportunistic cleanup so the maps don't grow without bound. */
-    private void maybePrune(long now) {
-        long last = lastPrune.get();
-        if (now - last < config.pruneIntervalMillis()) {
-            return;
-        }
-        if (!lastPrune.compareAndSet(last, now)) {
-            return; // another thread is pruning
-        }
-        long ttl = config.entryTtlMillis();
-        int removed = 0;
-        removed += prune(connections, now, ttl);
-        removed += prune(pings, now, ttl);
-        if (removed > 0 && config.logBlocks()) {
-            logger.debug("Australis pruned {} stale rate-limit entries", removed);
-        }
+    /** Drop entries not seen within {@code ttlMillis} whose ban has expired. */
+    public int prune(long ttlMillis) {
+        long now = System.currentTimeMillis();
+        return prune(connections, now, ttlMillis) + prune(pings, now, ttlMillis);
     }
 
     private int prune(Map<String, Window> table, long now, long ttl) {
         int[] removed = {0};
         table.entrySet().removeIf(e -> {
             Window w = e.getValue();
-            boolean expiredBan = w.blockedUntil.get() <= now;
-            boolean stale = now - w.lastSeen > ttl;
-            if (stale && expiredBan) {
+            if (now - w.lastSeen > ttl && w.blockedUntil.get() <= now) {
                 removed[0]++;
                 return true;
             }
@@ -145,4 +123,8 @@ public final class ConnectionRateLimiter {
         });
         return removed[0];
     }
+
+    // Exposed for metrics/tests.
+    public int trackedConnections() { return connections.size(); }
+    public int trackedPings() { return pings.size(); }
 }

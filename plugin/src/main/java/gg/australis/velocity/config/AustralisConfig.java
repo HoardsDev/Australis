@@ -49,6 +49,12 @@ public final class AustralisConfig {
     private Set<String> verifyAllowlist = Set.of();
     private String verifyKickMessage = "§bAustralis §7» §fVerifying connection… please reconnect.";
 
+    // Deep verification: limbo routing (Phase 2 deep)
+    private boolean limboEnabled = false;
+    private boolean limboOnlyDuringAttack = true;
+    private String limboServer = "limbo";
+    private String limboFallback = "";
+
     // Edge feedback (Phase 3)
     private boolean edgeEnabled = false;
     private String edgeUrl = "";
@@ -125,6 +131,11 @@ public final class AustralisConfig {
         if (vmsg instanceof String s) {
             verifyKickMessage = s;
         }
+        Map<String, Object> limbo = section(v, "limbo");
+        limboEnabled = asBool(limbo.get("enabled"), limboEnabled);
+        limboOnlyDuringAttack = asBool(limbo.get("only-during-attack"), limboOnlyDuringAttack);
+        limboServer = asString(limbo.get("server"), limboServer);
+        limboFallback = asString(limbo.get("fallback-server"), limboFallback);
 
         Map<String, Object> edge = section(root, "edge");
         edgeEnabled = asBool(edge.get("enabled"), edgeEnabled);
@@ -175,6 +186,10 @@ public final class AustralisConfig {
     public long verifyPendingTtlMillis() { return verifyPendingTtlMillis; }
     public Set<String> verifyAllowlist() { return verifyAllowlist; }
     public Component verifyKickMessage() { return Component.text(verifyKickMessage); }
+    public boolean limboEnabled() { return limboEnabled; }
+    public boolean limboOnlyDuringAttack() { return limboOnlyDuringAttack; }
+    public String limboServer() { return limboServer; }
+    public String limboFallback() { return limboFallback; }
     // Edge
     public boolean edgeEnabled() { return edgeEnabled; }
     public String edgeUrl() { return edgeUrl; }

@@ -26,6 +26,14 @@ dependencies {
 
     // Config (SnakeYAML is bundled with Velocity, but declare for clarity/tests).
     compileOnly("org.yaml:snakeyaml:2.2")
+
+    // Tests (the protection-logic classes are pure JDK and fully unit-tested).
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 tasks {

@@ -40,6 +40,8 @@ type server struct {
 	set4      string
 	set6      string
 	maxBanSec int
+	// nft runs an nftables command; injectable so tests don't need real nft.
+	nft func(args ...string) error
 }
 
 func main() {
@@ -55,7 +57,7 @@ func main() {
 		log.Fatal("australis-agent: -token is required")
 	}
 
-	s := &server{token: *token, table: *table, set4: *set4, set6: *set6, maxBanSec: *maxBan}
+	s := &server{token: *token, table: *table, set4: *set4, set6: *set6, maxBanSec: *maxBan, nft: realNft}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -132,6 +134,11 @@ func (s *server) addToSet(set, ip string, banSeconds int) error {
 	element := fmt.Sprintf("{ %s timeout %ds }", ip, banSeconds)
 	args := append([]string{"add", "element"}, parts...)
 	args = append(args, set, element)
+	return s.nft(args...)
+}
+
+// realNft invokes the nftables binary directly (no shell).
+func realNft(args ...string) error {
 	cmd := exec.Command("nft", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {

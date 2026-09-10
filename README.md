@@ -74,7 +74,13 @@ Working, and validated where the sandbox allowed:
 - **Layer 1 XDP:** integration plan around the open-source Minecraft XDP filters
   (see `edge/xdp/`).
 
-Next: deep packet-level (Sonar-style) verification, Bedrock/BungeeCord support,
+- **Deep verification:** limbo routing (`LimboRouter` + `australis:verify` plugin
+  channel) that sends unverified players to a limbo backend first.
+- **Tested:** 30 JUnit tests on the protection logic + Go tests on the edge, all
+  passing; the feedback loop and PROXY v2 header were verified live. See
+  [`docs/TESTING.md`](docs/TESTING.md).
+
+Next: native Netty-level (Sonar-style) checks, Bedrock/BungeeCord support,
 IPv6 XDP. See [`docs/ROADMAP.md`](docs/ROADMAP.md). Quick start:
 [`docs/QUICKSTART.md`](docs/QUICKSTART.md).
 
