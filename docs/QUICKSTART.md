@@ -2,10 +2,10 @@
 
 ## Mode A — Zero-ops (5 minutes): plugin + free tunnel
 
-1. **Build the plugin** (or grab the jar from Releases):
+1. **Build the plugin** (or grab the jar from Releases / the `builds` branch):
    ```bash
    cd plugin && ./gradlew shadowJar
-   # -> build/libs/rampart... no: build/libs/australis-velocity-0.2.0.jar
+   # -> build/libs/australis-velocity-0.2.0.jar
    ```
 2. Drop the jar into your Velocity `plugins/` folder and start the proxy once.
 3. Edit `plugins/australis/config.yml` if you want (defaults are sane).
@@ -18,7 +18,7 @@ You now have full L7/bot protection + IP hiding, free.
 
 ## Mode B — Self-edge (20 minutes): your own free Oracle VM
 
-On a free **Oracle Cloud always-free VM** (kernel ≥ 5.15):
+On a free **Oracle Cloud always-free VM** (any modern Linux with nftables):
 
 ```bash
 git clone https://github.com/Negativevibez/Australis-.git
@@ -27,17 +27,26 @@ sudo ORIGIN=10.8.0.1:25565 ./install-edge.sh    # 10.8.0.1 = your origin over Wi
 ```
 
 The installer builds the forwarder + agent, loads the nftables blocklist, and
-starts everything. It prints the `edge:` block to paste into the plugin config.
-Then:
+starts everything as systemd services. It prints the `edge:` block to paste into
+the plugin config. Then:
 
-1. On the **origin** Velocity, set `proxy-protocol = true` in `velocity.toml`.
-2. In `plugins/australis/config.yml`, fill the `edge:` section with the printed
+1. **Open the game port** to the internet on this edge box — both in the cloud
+   firewall (Oracle: the VCN **security list / NSG**) *and* the host: e.g.
+   `sudo ufw allow 25565/tcp`. (Oracle VMs block it by default — this is the #1
+   "why can't anyone connect" gotcha.)
+2. On the **origin** Velocity, set `haproxy-protocol = true` under `[advanced]`
+   in `velocity.toml` so it trusts the real client IP the forwarder sends.
+3. In `plugins/australis/config.yml`, fill the `edge:` section with the printed
    URL + token.
-3. Lock down the origin (docs/DEPLOYMENT.md → Origin lockdown).
-4. (Recommended) Add the XDP filter for line-rate L3/L4: `edge/xdp/README.md`.
+4. Lock down the origin so it only accepts the edge (docs/DEPLOYMENT.md → Origin
+   lockdown).
 
 Players connect to the Oracle VM's IP; your origin stays hidden; abusers the
-plugin convicts get dropped at the edge kernel automatically.
+plugin convicts get dropped at the edge kernel (nftables) automatically.
+
+> **Optional, later:** an XDP/eBPF filter for line-rate SYN/packet filtering is
+> planned (`edge/xdp/README.md`) — it is **not shipped yet**. The nftables path
+> above is what runs today.
 
 ## Verify it's working
 ```
