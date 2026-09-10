@@ -1,0 +1,15 @@
+name: Australis
+main: gg.australis.paper.AustralisPaper
+version: 0.2.0
+api-version: '1.21'
+authors: [Negativevibez]
+description: Free self-hosted L7 DDoS/bot protection (Paper-native).
+commands:
+  australis:
+    description: Australis admin (stats, reload, verify, unverify)
+    usage: /australis <stats|reload|verify|unverify> [ip]
+    permission: australis.admin
+permissions:
+  australis.admin:
+    description: Manage Australis
+    default: op

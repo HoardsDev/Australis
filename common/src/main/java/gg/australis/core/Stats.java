@@ -1,4 +1,4 @@
-package gg.australis.velocity.metrics;
+package gg.australis.core;
 
 import java.util.concurrent.atomic.AtomicLong;
 

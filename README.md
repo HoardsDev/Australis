@@ -55,11 +55,17 @@ docs/                 The plan
   THREAT-MODEL.md     Every attack + the exact layer that kills it
   DEPLOYMENT.md       Stand it up on free infra (Mode A / Mode B)
   ROADMAP.md          Build order, phase by phase
-plugin/               Velocity plugin (Layer 2) — Phase 1 scaffold, buildable
+common/               Shared protection logic (gg.australis.core) — one source of truth
+plugin/               Velocity plugin (Layer 2) — for networks behind a proxy
+paper/                Paper/Spigot plugin — runs directly on a backend server
 edge/xdp/             Kernel XDP/eBPF filter (Layer 1) — integration plan
 edge/proxy/           Edge TCP forwarder (Layer 0 self-mode) — integration plan
 testkit/              floodtest — MC load/attack harness (run from your own box)
 ```
+
+**Which plugin?** Running a **Velocity** network → use `plugin/`. Running a
+single **Paper** server (like a Paper server) with no proxy → use `paper/` (drop the
+jar in `plugins/`). Both share the exact same tested protection logic.
 
 ## Status
 

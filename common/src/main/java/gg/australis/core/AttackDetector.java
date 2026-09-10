@@ -1,4 +1,4 @@
-package gg.australis.velocity.filter;
+package gg.australis.core;
 
 import java.util.concurrent.atomic.AtomicLong;
 

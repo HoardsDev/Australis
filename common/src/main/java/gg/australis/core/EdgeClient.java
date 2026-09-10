@@ -1,6 +1,5 @@
-package gg.australis.velocity.edge;
+package gg.australis.core;
 
-import gg.australis.velocity.metrics.Stats;
 import org.slf4j.Logger;
 
 import java.net.URI;

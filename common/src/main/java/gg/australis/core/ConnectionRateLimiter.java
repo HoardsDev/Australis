@@ -1,4 +1,4 @@
-package gg.australis.velocity.filter;
+package gg.australis.core;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;

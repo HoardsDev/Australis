@@ -1,4 +1,4 @@
-package gg.australis.velocity.verify;
+package gg.australis.core;
 
 import java.util.Optional;
 

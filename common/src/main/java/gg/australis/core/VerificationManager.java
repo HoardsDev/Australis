@@ -1,4 +1,4 @@
-package gg.australis.velocity.verify;
+package gg.australis.core;
 
 import java.util.Map;
 import java.util.Set;
@@ -26,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *       in. Clients that reconnect within the human window are let through and
  *       promoted to verified on successful login.</li>
  *   <li><b>Attack-gated</b> — challenges only apply while {@link
- *       gg.australis.velocity.filter.AttackDetector} reports an attack, so
+ *       gg.australis.core.AttackDetector} reports an attack, so
  *       normal operation is completely transparent.</li>
  * </ol>
  *
@@ -77,7 +77,7 @@ public final class VerificationManager {
      * Decide whether an incoming connection should be allowed or challenged.
      *
      * @param ip           the remote IP
-     * @param underAttack  current attack state from {@link gg.australis.velocity.filter.AttackDetector}
+     * @param underAttack  current attack state from {@link gg.australis.core.AttackDetector}
      */
     public Result check(String ip, boolean underAttack) {
         if (!enabled) {

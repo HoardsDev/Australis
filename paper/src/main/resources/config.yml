@@ -1,0 +1,45 @@
+# Australis (Paper-native) configuration.
+# Runs directly on your Paper server — no proxy required.
+# Reload live with:  /australis reload
+
+connections:
+  max-per-window: 8
+  window-millis: 3000
+  block-millis: 30000
+
+pings:
+  max-per-window: 20
+  window-millis: 3000
+  block-millis: 10000
+
+login:
+  max-per-window: 6
+  window-millis: 5000
+  max-churn: 4
+
+attack-detector:
+  connections-per-second: 60
+  cooldown-millis: 30000
+
+verification:
+  enabled: true
+  only-during-attack: true
+  reconnect-window-millis: 15000
+  verified-ttl-millis: 3600000
+  pending-ttl-millis: 60000
+  kick-message: "Australis > Verifying connection... please reconnect."
+  allowlist: []
+
+# Push convicted IPs to an Australis edge agent (nftables/XDP). Optional.
+edge:
+  enabled: false
+  url: "http://10.8.0.2:8787"
+  token: "change-me"
+  ban-seconds: 600
+
+housekeeping:
+  prune-interval-millis: 60000
+  entry-ttl-millis: 300000
+
+log-blocks: true
+kick-message: "Australis > You are connecting too quickly. Try again shortly."

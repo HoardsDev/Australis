@@ -1,6 +1,6 @@
-package gg.australis.velocity.verify;
+package gg.australis.core;
 
-import gg.australis.velocity.verify.VerificationManager.Result;
+import gg.australis.core.VerificationManager.Result;
 import org.junit.jupiter.api.Test;
 
 import java.util.Set;

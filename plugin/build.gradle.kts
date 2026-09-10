@@ -14,6 +14,14 @@ tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
 }
 
+// Shared protection logic (gg.australis.core) lives in ../common and is compiled
+// into both the Velocity and Paper plugins — one source of truth, no drift.
+sourceSets {
+    main {
+        java.srcDir("../common/src/main/java")
+    }
+}
+
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/") // Velocity API

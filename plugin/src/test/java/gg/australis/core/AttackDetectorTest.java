@@ -1,4 +1,4 @@
-package gg.australis.velocity.filter;
+package gg.australis.core;
 
 import org.junit.jupiter.api.Test;
 
