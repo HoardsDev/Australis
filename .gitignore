@@ -17,3 +17,8 @@ build/
 # eBPF build artifacts
 *.o
 *.ll
+
+# built floodtest binaries (artifacts)
+testkit/floodtest
+testkit/floodtest.exe
+testkit/floodtest-linux
