@@ -31,11 +31,13 @@ Ordered by value-per-effort. Each phase is independently useful — ship as you 
 - [x] Verified-IP allowlist with TTL; auto-verify on successful session
 - [x] Operator allowlist + manual `/australis verify|unverify`
 - [x] Pass → forward; fail → (via limiters) drop + feed to edge blocklist
-- [~] **Deep:** limbo *routing* is built (`LimboRouter` + `australis:verify`
-      plugin channel + PlayerChooseInitialServerEvent), unit-tested, and now has a
-      setup guide (`DEPLOYMENT.md` → Deep verification). Still needs a live limbo
-      backend (NanoLimbo/Sonar) to exercise the movement/keep-alive round-trip
-      end-to-end. Native Netty-level checks in-proxy remain a future option.
+- [x] **Deep:** full limbo flow implemented — proxy routing (`LimboRouter` +
+      `PlayerChooseInitialServerEvent`) **plus** the `limbo/` verifier plugin that
+      holds clients, checks behaviour, and signals `australis:verify`; the proxy
+      promotes the IP and moves them to a real server. Fixed the bug where
+      post-login auto-verify disabled routing (verify now happens on reaching a
+      *real* backend). Unit-tested; needs a live MC network for full E2E.
+      Native Netty-level in-proxy checks remain a future option.
 
 ## Phase 3 — Edge + feedback loop ✅ / XDP [ ]
 **Deliverable:** origin hiding + in-kernel drop of convicted IPs on a free VM

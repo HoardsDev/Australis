@@ -6,6 +6,10 @@ All notable changes to Australis. Format loosely follows
 ## [Unreleased]
 
 ### Added
+- **`limbo/` — the limbo verifier plugin**, completing deep verification: a Paper
+  plugin that holds routed clients, checks for real-client behaviour, and signals
+  `australis:verify`; the proxy then promotes the IP and moves them to a real
+  server. Wired into CI + the `builds` branch. Setup in `DEPLOYMENT.md`.
 - Handshake-stage attack detection + per-IP connection limiting on Velocity
   (`ConnectionHandshakeEvent`), with the kick enforced at `PreLogin`. Detection
   now reflects true volume instead of the post-`login-ratelimit` trickle.
@@ -37,6 +41,9 @@ All notable changes to Australis. Format loosely follows
 - Velocity config YAML is loaded via `SafeConstructor`.
 
 ### Fixed
+- Limbo routing was dead code: the proxy auto-verified every IP at post-login,
+  before the initial-server choice, so unverified players were never routed to
+  limbo. Auto-verify now happens only on reaching a *real* backend.
 - `EdgeClient` now uses a bounded queue + discard policy (was an unbounded queue —
   a heap-exhaustion DoS on the defender under a unique-IP flood).
 - Zero/negative config values no longer crash startup or pin permanent attack mode.

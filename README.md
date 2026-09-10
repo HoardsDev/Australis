@@ -69,6 +69,7 @@ docs/                 The plan
 common/               Shared protection logic (gg.australis.core) — one source of truth
 plugin/               Velocity plugin (Layer 2) — for networks behind a proxy
 paper/                Paper/Spigot plugin — runs directly on a backend server
+limbo/                Paper limbo verifier — proves real clients, signals the proxy
 edge/cmd/forwarder/   Edge TCP forwarder (Layer 0 self-mode) — built + tested
 edge/cmd/agent/       Feedback agent: plugin → nftables kernel drop — built + tested
 edge/nftables/        nftables ruleset (blocklist + SYN fallback) — the L3/L4 layer today

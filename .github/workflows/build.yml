@@ -48,6 +48,26 @@ jobs:
           name: australis-paper-plugin
           path: paper/build/libs/*.jar
 
+  limbo:
+    name: Build limbo verifier
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Test + build shaded jar
+        working-directory: limbo
+        run: |
+          chmod +x gradlew
+          ./gradlew test shadowJar --no-daemon --console=plain
+      - name: Upload jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: australis-limbo-plugin
+          path: limbo/build/libs/*.jar
+
   edge:
     name: Build edge binaries
     runs-on: ubuntu-latest
@@ -95,7 +115,7 @@ jobs:
   release:
     name: Attach to release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [plugin, paper, edge, testkit]
+    needs: [plugin, paper, limbo, edge, testkit]
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -1,0 +1,6 @@
+name: AustralisLimbo
+main: gg.australis.limbo.AustralisLimbo
+version: 0.2.0
+api-version: '1.21'
+authors: [Negativevibez]
+description: Australis limbo verifier — proves real clients and signals the proxy over australis:verify.

@@ -10,6 +10,7 @@ import com.velocitypowered.api.event.connection.PluginMessageEvent;
 import com.velocitypowered.api.event.connection.PostLoginEvent;
 import com.velocitypowered.api.event.connection.PreLoginEvent;
 import com.velocitypowered.api.event.player.PlayerChooseInitialServerEvent;
+import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyPingEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
@@ -268,11 +269,29 @@ public final class AustralisPlugin {
         }
     }
 
+    /**
+     * Auto-verify an IP only once it has actually reached a <em>real</em> backend
+     * (not the limbo). Doing this here — rather than at {@link PostLoginEvent} —
+     * is essential: marking verified at post-login would run before
+     * {@link #onChooseInitialServer} and disable limbo routing entirely.
+     */
     @Subscribe
-    public void onPostLogin(PostLoginEvent event) {
+    public void onServerConnected(ServerConnectedEvent event) {
+        String connected = event.getServer().getServerInfo().getName();
+        if (connected.equalsIgnoreCase(config.limboServer())) {
+            return; // reaching limbo is not proof of anything
+        }
         InetSocketAddress remote = event.getPlayer().getRemoteAddress();
-        if (remote != null && remote.getAddress() != null) {
-            verification.markVerified(remote.getAddress().getHostAddress());
+        if (remote == null || remote.getAddress() == null) {
+            return;
+        }
+        String ip = remote.getAddress().getHostAddress();
+        // Count a pass only the first time an IP becomes verified (not on every
+        // server switch, and not double-counting a limbo pass already counted in
+        // onPluginMessage); always refresh the TTL.
+        boolean wasVerified = verification.isVerified(ip);
+        verification.markVerified(ip);
+        if (!wasVerified) {
             stats.verificationsPassed.incrementAndGet();
         }
     }

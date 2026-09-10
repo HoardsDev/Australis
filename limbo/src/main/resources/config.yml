@@ -1,0 +1,13 @@
+# Australis limbo verifier.
+# Run this on the lightweight Paper server your Velocity proxy routes
+# not-yet-verified players to (velocity.toml `limbo`, australis `verification.limbo`).
+# When a held client behaves like a real player, this plugin signals the proxy on
+# the `australis:verify` channel and the proxy promotes the IP + moves them to a
+# real server.
+
+min-hold-millis: 1500      # observe a client at least this long before passing
+require-movement: true     # require a real movement/look packet to pass (bots that
+                           # never move are filtered). Set false if idle real
+                           # players are being kicked.
+fail-after-millis: 15000   # kick a client that never passes within this window
+kick-message: "§bAustralis §7» §fVerification failed — reconnect to try again."

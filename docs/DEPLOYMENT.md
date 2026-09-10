@@ -115,13 +115,17 @@ lightweight **limbo** backend first, which runs movement/keep-alive checks befor
 they can reach the real server. This is attack-gated by default, so real players
 are untouched in normal operation.
 
-1. Run a limbo backend — **NanoLimbo** (tiny, standalone) or a Paper server with
-   **Sonar** — and register it in `velocity.toml`, e.g.:
+1. Run a small **Paper** server as the limbo and drop in the **`australis-limbo`**
+   jar (`limbo/`, built by CI / on the `builds` branch). It holds each arriving
+   client briefly, watches for real-client behaviour (a movement/look packet),
+   and signals the proxy when they pass. Register it in `velocity.toml`:
    ```
    [servers]
    limbo = "127.0.0.1:30066"
    ```
-2. In `plugins/australis/config.yml`:
+   Tune `plugins/AustralisLimbo/config.yml` (`min-hold-millis`, `require-movement`,
+   `fail-after-millis`) if needed.
+2. In the proxy's `plugins/australis/config.yml`:
    ```yaml
    verification:
      limbo:
@@ -130,11 +134,13 @@ are untouched in normal operation.
        server: "limbo"             # must match the velocity.toml server name
        fallback-server: ""         # blank = first non-limbo server
    ```
-3. The limbo backend signals a pass on the `australis:verify` plugin channel;
-   Australis then marks the IP verified and moves the player to a real server.
-   (NanoLimbo needs a small plugin/config to emit that message; Sonar-style
-   movement checks are the alternative. This flow needs a live limbo backend to
-   exercise end-to-end — the routing logic itself is unit-tested.)
+3. Flow: unverified player → routed to `limbo` → `australis-limbo` verifies →
+   sends `australis:verify` → the proxy marks the IP verified and moves them to a
+   real server. Dumb flood bots that never behave like a client are kicked from
+   limbo and never reach your backend. (An IP is auto-trusted for
+   `verified-ttl-millis` once it reaches a real server, so returning players skip
+   limbo. Alternatively you can point `limbo` at NanoLimbo/Sonar if you prefer
+   their checks — anything that emits `australis:verify` from the backend works.)
 
 ## Verifying it works
 - **Plugin state:** `/australis stats` (needs `australis.admin`) — shows attack
