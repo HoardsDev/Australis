@@ -28,6 +28,7 @@ import gg.australis.core.AttackDetector;
 import gg.australis.core.ConnectionRateLimiter;
 import gg.australis.core.EdgeClient;
 import gg.australis.core.LimboRouter;
+import gg.australis.core.MetricsServer;
 import gg.australis.core.LoginThrottle;
 import gg.australis.core.Stats;
 import gg.australis.core.VerificationManager;
@@ -36,6 +37,7 @@ import gg.australis.velocity.config.AustralisConfig;
 import gg.australis.velocity.filter.PingCache;
 import org.slf4j.Logger;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -77,6 +79,7 @@ public final class AustralisPlugin {
     private LimboRouter limboRouter;
     private PingCache pingCache;
     private EdgeClient edgeClient;
+    private MetricsServer metricsServer;
 
     private ScheduledTask pruneTask;
     private final AtomicBoolean attackActive = new AtomicBoolean(false);
@@ -127,6 +130,17 @@ public final class AustralisPlugin {
                 config.verifyOnlyDuringAttack(),
                 config.edgeEnabled() ? "on -> " + config.edgeUrl() : "off");
         logger.info("See docs/DEPLOYMENT.md for the edge (origin hiding + kernel blocklist feedback).");
+
+        if (config.metricsEnabled()) {
+            metricsServer = new MetricsServer(stats, attackDetector::isUnderAttack, verification::verifiedCount);
+            try {
+                metricsServer.start(config.metricsBind());
+                logger.info("Australis Prometheus metrics: http://{}/metrics", config.metricsBind());
+            } catch (IOException | RuntimeException e) {
+                logger.warn("Australis metrics failed to start on {}: {}", config.metricsBind(), e.getMessage());
+                metricsServer = null;
+            }
+        }
     }
 
     @Subscribe
@@ -136,6 +150,9 @@ public final class AustralisPlugin {
         }
         if (edgeClient != null) {
             edgeClient.shutdown();
+        }
+        if (metricsServer != null) {
+            metricsServer.stop();
         }
     }
 

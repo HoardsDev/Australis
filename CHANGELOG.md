@@ -6,6 +6,11 @@ All notable changes to Australis. Format loosely follows
 ## [Unreleased]
 
 ### Added
+- **Prometheus metrics** on the Velocity & Paper plugins (opt-in `metrics.enabled`
+  + `metrics.bind`): `/metrics` (australis_* counters — attacks, blocks,
+  verifications, edge pushes) and `/health`, for Grafana dashboards. Shared
+  `MetricsServer`/`PrometheusExporter` in `common/` (JDK-only), with a live
+  HTTP round-trip test.
 - **`testkit/lab.sh`** — self-attack regression lab: runs a matrix of floodtest
   scenarios against a target you own and writes a summary table, for
   baseline-vs-protected comparison after changes.

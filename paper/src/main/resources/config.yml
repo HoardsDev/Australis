@@ -39,6 +39,11 @@ edge:
   token: "change-me"
   ban-seconds: 600
 
+# Prometheus metrics (optional): /metrics + /health. Bind to loopback/private.
+metrics:
+  enabled: false
+  bind: "127.0.0.1:9110"
+
 housekeeping:
   prune-interval-millis: 60000
   entry-ttl-millis: 300000

@@ -5,6 +5,7 @@ import gg.australis.core.ConfigSanitizer;
 import gg.australis.core.ConnectionRateLimiter;
 import gg.australis.core.EdgeClient;
 import gg.australis.core.LoginThrottle;
+import gg.australis.core.MetricsServer;
 import gg.australis.core.Stats;
 import gg.australis.core.VerificationManager;
 import org.bukkit.command.Command;
@@ -21,6 +22,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.ServerListPingEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.HashSet;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -46,6 +48,7 @@ public final class AustralisPaper extends JavaPlugin implements Listener, Comman
     private LoginThrottle loginThrottle;
     private VerificationManager verification;
     private EdgeClient edgeClient;
+    private MetricsServer metricsServer;
 
     private volatile String kickMsg = "Australis > You are connecting too quickly.";
     private volatile String verifyKickMsg = "Australis > Verifying... please reconnect.";
@@ -74,6 +77,18 @@ public final class AustralisPaper extends JavaPlugin implements Listener, Comman
         long ticks = Math.max(20L, entryTtlWindowTicks());
         getServer().getScheduler().runTaskTimerAsynchronously(this, this::prune, ticks, ticks);
 
+        if (getConfig().getBoolean("metrics.enabled", false)) {
+            String bind = getConfig().getString("metrics.bind", "127.0.0.1:9110");
+            metricsServer = new MetricsServer(stats, attackDetector::isUnderAttack, verification::verifiedCount);
+            try {
+                metricsServer.start(bind);
+                getSLF4JLogger().info("Australis Prometheus metrics: http://{}/metrics", bind);
+            } catch (IOException | RuntimeException e) {
+                getSLF4JLogger().warn("Australis metrics failed to start on {}: {}", bind, e.getMessage());
+                metricsServer = null;
+            }
+        }
+
         getSLF4JLogger().info("Australis (Paper) enabled — L7 protection active.");
     }
 
@@ -81,6 +96,9 @@ public final class AustralisPaper extends JavaPlugin implements Listener, Comman
     public void onDisable() {
         if (edgeClient != null) {
             edgeClient.shutdown();
+        }
+        if (metricsServer != null) {
+            metricsServer.stop();
         }
     }
 

@@ -161,6 +161,25 @@ are untouched in normal operation.
 
 ---
 
+## Observability (optional)
+
+Both the plugin and the edge forwarder can expose Prometheus metrics — point
+Prometheus at them and build a Grafana panel. Bind to loopback or a private link
+(no auth; the counters aren't sensitive).
+
+- **Plugin (Velocity/Paper):** set in `config.yml`:
+  ```yaml
+  metrics:
+    enabled: true
+    bind: "127.0.0.1:9110"
+  ```
+  Scrape `http://127.0.0.1:9110/metrics` — `australis_*` counters (connections
+  seen/blocked, pings, logins throttled, verification challenges/passes, edge
+  pushes, attacks detected) plus `australis_under_attack` / `australis_verified_ips`.
+  `/health` returns `ok`.
+- **Edge forwarder:** run with `-metrics 127.0.0.1:9100` — accept/active/rejected
+  counters.
+
 ## Cost recap
 | Item | Mode A | Mode B |
 |---|---|---|

@@ -64,6 +64,10 @@ public final class AustralisConfig {
     private String edgeToken = "";
     private long edgeBanSeconds = 600;
 
+    // Prometheus metrics (optional)
+    private boolean metricsEnabled = false;
+    private String metricsBind = "127.0.0.1:9110";
+
     // Housekeeping
     private long pruneIntervalMillis = 60_000;
     private long entryTtlMillis = 300_000;
@@ -222,6 +226,10 @@ public final class AustralisConfig {
         edgeToken = asString(edge.get("token"), edgeToken);
         edgeBanSeconds = asLong(edge.get("ban-seconds"), edgeBanSeconds);
 
+        Map<String, Object> metrics = section(root, "metrics");
+        metricsEnabled = asBool(metrics.get("enabled"), metricsEnabled);
+        metricsBind = asString(metrics.get("bind"), metricsBind);
+
         Map<String, Object> hk = section(root, "housekeeping");
         pruneIntervalMillis = asLong(hk.get("prune-interval-millis"), pruneIntervalMillis);
         entryTtlMillis = asLong(hk.get("entry-ttl-millis"), entryTtlMillis);
@@ -274,6 +282,8 @@ public final class AustralisConfig {
     public String edgeUrl() { return edgeUrl; }
     public String edgeToken() { return edgeToken; }
     public long edgeBanSeconds() { return edgeBanSeconds; }
+    public boolean metricsEnabled() { return metricsEnabled; }
+    public String metricsBind() { return metricsBind; }
     // Housekeeping
     public long pruneIntervalMillis() { return pruneIntervalMillis; }
     public long entryTtlMillis() { return entryTtlMillis; }

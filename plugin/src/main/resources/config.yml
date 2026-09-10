@@ -60,6 +60,13 @@ edge:
   token: "change-me"            # must match the agent's TOKEN (env on the edge box)
   ban-seconds: 600              # how long the edge should drop the IP
 
+# --- Prometheus metrics (optional) ---
+# Exposes /metrics (Prometheus text) and /health. Bind to loopback or a private
+# link — the counters aren't sensitive but there is no auth. Off by default.
+metrics:
+  enabled: false
+  bind: "127.0.0.1:9110"
+
 # --- Memory housekeeping ---
 housekeeping:
   prune-interval-millis: 60000

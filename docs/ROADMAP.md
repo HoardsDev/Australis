@@ -67,6 +67,8 @@ See `docs/HOSTED-EDGE.md`.
 - [ ] Optional signup integration with the the storefront
 
 ## Cross-cutting
+- [x] Prometheus `/metrics` on the plugin (Velocity + Paper) and the edge
+      forwarder — point Prometheus at them; a Grafana dashboard is just a panel set
 - [ ] BungeeCord/Waterfall port of the plugin
 - [ ] Paper-direct mode (servers without a proxy)
 - [ ] Bedrock/RakNet edge (Upioti XDP filter)
