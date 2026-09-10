@@ -11,3 +11,6 @@
 *.jar binary
 *.png binary
 *.ico binary
+
+# eBPF objects are binary — never normalize.
+edge/xdp/*.o binary
