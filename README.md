@@ -114,7 +114,22 @@ Next: native Netty-level (Sonar-style) checks, Bedrock/BungeeCord support,
 IPv6 XDP. See [`docs/ROADMAP.md`](docs/ROADMAP.md). Quick start:
 [`docs/QUICKSTART.md`](docs/QUICKSTART.md).
 
-## Build
+## Install (plug and play)
+
+No toolchain needed — grab prebuilt artifacts from [Releases](../../releases):
+
+- **Plugin (the common case):** download the jar for your platform —
+  `australis-velocity-*.jar` (Velocity), `australis-bungee-*.jar`
+  (BungeeCord/Waterfall), or `australis-paper-*.jar` (a single Paper server with
+  no proxy) — drop it in `plugins/`, start once, then edit
+  `plugins/australis/config.yml`. Done. Sane defaults work out of the box.
+- **Edge (Mode B, optional):** on a cheap/free VM run one command —
+  `sudo ORIGIN=<your-server-ip>:25565 ./edge/install-edge.sh` (add `XDP=1` for the
+  line-rate kernel filter). It sets up the forwarder + nftables + agent (+ XDP)
+  and prints the `edge:` block to paste into the plugin config. Full walkthrough:
+  [`docs/QUICKSTART.md`](docs/QUICKSTART.md).
+
+## Build (from source)
 
 ```bash
 # Plugin (needs JDK 17+)
