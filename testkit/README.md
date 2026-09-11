@@ -12,8 +12,8 @@ protection work (or find gaps) against a real proxy.
 
 ## Why run from your own machine
 It generates real connection/flood traffic, so it must originate from a host you
-control on a network that permits it — not from a shared/cloud sandbox. Build it
-locally and run it against your test target.
+control on a network that permits it — not from a shared or restricted-network
+host. Build it locally and run it against your test target.
 
 ## Build
 ```bash

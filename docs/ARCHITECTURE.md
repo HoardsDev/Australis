@@ -1,6 +1,5 @@
 # Australis — Architecture & "How We Actually Block Attacks"
 
-> Working codename: **Australis**. Rename freely.
 > Goal: a **free**, **self-hosted** protection stack for Minecraft servers that
 > defeats the attacks servers actually get hit with — bot floods, ping floods,
 > protocol exploits, and packet/SYN floods — while hiding the origin IP.

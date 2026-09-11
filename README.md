@@ -4,7 +4,6 @@
 protection stack you run yourself — no monthly bill, origin IP hidden, and it
 actually stops the attacks servers get hit with.
 
-> Working codename **Australis** — rename to whatever you ship it as.
 > **Status: working v1.** The Velocity/Bungee/Paper plugins, the Go edge
 > (forwarder + nftables feedback loop), and the **XDP/eBPF line-rate filter** are
 > all built, tested, and live-validated (the XDP filter dropped 700k+ SYNs/4s and
@@ -89,7 +88,7 @@ network → `bungee/`. Single **Paper** server with no proxy →
 
 ## Status
 
-Working, and validated where the sandbox allowed:
+Working, and validated end-to-end:
 - **Layer 2 plugin (Java):** attack detector, per-IP connection/ping/login rate
   limiting, connect/disconnect churn detection, status-ping cache, bot
   verification (reconnect challenge, attack-gated), verified-IP allowlist,

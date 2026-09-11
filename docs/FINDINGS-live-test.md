@@ -1,7 +1,6 @@
 # Australis — Live Flood-Test Findings (2026-09-10)
 
-First live test of the Velocity plugin against a real proxy, run from a local
-session (the cloud sandbox couldn't reach out). This is the honest,
+First live test of the Velocity plugin against a real proxy. This is the honest,
 evidence-backed counterpart to `ROADMAP.md` — read both. **Headline: the L7
 plugin, as currently architected, was never exercised by the flood and would add
 little against it in production. The reasons are structural, not a config typo.**
