@@ -21,8 +21,8 @@ You now have full L7/bot protection + IP hiding, free.
 On a free **Oracle Cloud always-free VM** (any modern Linux with nftables):
 
 ```bash
-git clone https://github.com/Negativevibez/Australis-.git
-cd Australis-/edge
+git clone https://github.com/Negativevibez/Australis.git
+cd Australis/edge
 sudo ORIGIN=10.8.0.1:25565 ./install-edge.sh    # 10.8.0.1 = your origin over WireGuard
 ```
 

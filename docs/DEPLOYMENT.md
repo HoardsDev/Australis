@@ -59,8 +59,8 @@ provider does their own L3/L4 scrubbing.
 
 ### B2. Install the edge (forwarder + agent + nftables) — one command
 ```bash
-git clone https://github.com/Negativevibez/Australis-.git
-cd Australis-/edge
+git clone https://github.com/Negativevibez/Australis.git
+cd Australis/edge
 sudo ORIGIN=<your-origin-ip>:25565 ./install-edge.sh
 ```
 This builds the forwarder + agent, loads the nftables blocklist ruleset, installs
