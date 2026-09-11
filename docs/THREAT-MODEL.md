@@ -20,9 +20,12 @@ stop it.
 > - **L1 (XDP/eBPF)** — ✅ **shipped** (opt-in `XDP=1`): per-source SYN-flood drop
 >   on the game port + an expiring convicted-IP blocklist, dropped at the NIC
 >   driver at line rate (validated: 700k+ SYNs dropped in 4s on a test box).
->   nftables is the default L3/L4 path when XDP is off. 🚧 Still to add to the XDP
->   filter: in-kernel MC-protocol/VarInt validation and amplification source-port
->   drops. See `edge/xdp/README.md` and `ARCHITECTURE.md §6`.
+>   nftables is the default L3/L4 path when XDP is off. The XDP filter also drops
+>   packet-level malformed/crafted TCP on the game port — truncated headers, bad
+>   flag combinations (NULL/XMAS/SYN-FIN/SYN-RST) and privileged-source-port SYNs
+>   (validated by a `BPF_PROG_TEST_RUN` harness, `edge/xdp/xdp_run_test.go`).
+>   XDP is stateless per-packet, so stream-deep MC/VarInt validation stays in L2.
+>   See `edge/xdp/README.md` and `ARCHITECTURE.md §6`.
 
 ---
 
@@ -56,9 +59,12 @@ stop it.
   designed to crash Netty or spike CPU (decompression bombs, illegal states).
 - **Bucket:** C
 - **Defense:**
-  - **L1:** validate VarInts and packet structure in the eBPF program; drop
-    protocol violations before the kernel/Netty touches them.
-  - **L2:** packet-size and decompression limits *before* decode; reject
+  - **L1 (shipped):** drop packet-level malformed/crafted TCP at the NIC —
+    truncated headers, illegal flag combinations (NULL/XMAS/SYN-FIN/SYN-RST) and
+    privileged-source-port SYNs — before the kernel/Netty allocates anything.
+    Stateless per-packet, so it cannot reassemble a stream; that is L2's job.
+  - **L2:** VarInt/packet-structure validation on the reassembled stream,
+    packet-size and decompression limits *before* decode, and rejection of
     out-of-order protocol states (login before handshake, etc.).
 
 ### 4. Login/auth abuse & join-leave spam

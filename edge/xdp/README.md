@@ -16,11 +16,15 @@ IPv4/TCP, on the game port:
 - **Convicted-IP blocklist** — an expiring hash map (`australis_blocklist`) the
   `australis-agent` writes when the plugin convicts an IP. Matching packets are
   dropped at the NIC. This is the feedback loop, moved from nftables to XDP.
-- Drops truncated TCP as malformed; passes everything else. Counters in
-  `australis_stats`.
+- **Malformed / crafted TCP drop** — on the game port, drops truncated headers,
+  illegal flag combinations (NULL/XMAS/SYN-FIN/SYN-RST) and privileged-source-port
+  SYNs (spoofed/reflected). Never produced by a real client; dropped line-rate.
+  Covered by a `BPF_PROG_TEST_RUN` regression test (`xdp_run_test.go`).
+- Passes everything else. Counters in `australis_stats`.
 
-Not yet in the program (nftables/L2 cover these meanwhile): deep MC-protocol /
-VarInt validation, amplification source-port drops, IPv6, Bedrock/RakNet.
+Deliberately out of scope for the (stateless) XDP program — handled by L2 on the
+reassembled stream: deep MC-protocol / VarInt validation. Still to come: IPv6,
+Bedrock/RakNet.
 
 ## Components
 - `australis_xdp.c` — the eBPF program (compiled to `australis_bpf{el,eb}.o`).

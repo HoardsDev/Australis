@@ -36,8 +36,8 @@ Honest status: ✅ = shipped & tested today · ⚠️ = partial/dependent · �
 | Origin-IP exposure | Edge forwarder (PROXY v2) / tunnel hides it | ✅ shipped |
 | SYN flood on the game port | **XDP** per-source SYN drop at the NIC (nftables fallback) | ✅ shipped (opt-in) |
 | Convicted IP, at the NIC | **XDP** blocklist drop via the feedback loop (or nftables) | ✅ shipped |
-| Malformed / truncated packets | XDP drops truncated TCP; deep VarInt/protocol checks | ⚠️ partial |
-| Volumetric bigger than your uplink | Free anycast upstream (or paid scrubber) | ⚠️ upstream-dependent |
+| Malformed / crafted packets | **XDP** drops truncated TCP, bad flag combos (NULL/XMAS/SYN-FIN/SYN-RST) and privileged-source-port SYNs at the NIC; stream-deep VarInt validation runs in L2 | ✅ shipped |
+| Volumetric bigger than your uplink | Free anycast upstream (playit.gg) or a scrubber — **cannot** be stopped on-box; the flood is dropped upstream of your NIC by definition | ⚠️ off-box (physics) |
 
 **What's shipped:** two L3/L4 paths — **nftables** (default, everywhere) and the
 **XDP/eBPF** filter (`edge/xdp/`, opt-in with `XDP=1`) which drops SYN floods and

@@ -135,8 +135,35 @@ int australis_filter(struct xdp_md *ctx)
         return XDP_PASS; /* not configured yet — fail open */
     }
 
-    /* 2) Per-source SYN rate-limit on the game port only. */
-    if (tcp->dest == bpf_htons(cfg->game_port) && tcp->syn && !tcp->ack) {
+    int to_game = (tcp->dest == bpf_htons(cfg->game_port));
+
+    /* 2) Malformed / crafted TCP aimed at the game port. These flag combinations
+     *    and headers are never produced by a real Minecraft client's stack; they
+     *    are scan/flood/spoof junk, so we drop them at the NIC. XDP is stateless,
+     *    so this covers packet-level malformation only — stream-deep MC/VarInt
+     *    validation stays in L2 (the proxy), where TCP reassembly exists. */
+    if (to_game) {
+        __u8 malformed =
+            (tcp->doff < 5) ||                                    /* impossible data offset */
+            (!tcp->syn && !tcp->ack && !tcp->rst && !tcp->fin) || /* NULL scan */
+            (tcp->syn && tcp->fin) ||                             /* SYN+FIN */
+            (tcp->syn && tcp->rst) ||                             /* SYN+RST */
+            (tcp->fin && tcp->psh && tcp->urg && !tcp->ack);      /* XMAS scan */
+        if (malformed) {
+            bump(ST_DROP_MALFORMED);
+            return XDP_DROP;
+        }
+        /* A brand-new connection whose source port is privileged (<1024) is
+         * spoofed or hand-crafted — real clients always use ephemeral ports.
+         * This also swats classic reflection source ports (53, 123, 389, ...). */
+        if (tcp->syn && !tcp->ack && bpf_ntohs(tcp->source) < 1024) {
+            bump(ST_DROP_MALFORMED);
+            return XDP_DROP;
+        }
+    }
+
+    /* 3) Per-source SYN rate-limit on the game port only. */
+    if (to_game && tcp->syn && !tcp->ack) {
         struct syn_state *st = bpf_map_lookup_elem(&australis_syn, &saddr);
         if (!st) {
             struct syn_state init = { .window_start_ns = now, .count = 1 };
